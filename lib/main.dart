@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:password/widgets/AccountListPage.dart';
+import 'package:password/page/AccountListPage.dart';
 
 void main() {
   runApp(AccountManagerApp());
