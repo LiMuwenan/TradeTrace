@@ -93,7 +93,8 @@ class _AccountListPageState extends State<AccountListPage> {
   Future<void> _exportData() async {
     try {
       // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
+      PermissionStatus status = await Permission.storage.request();
+      if (!status.isGranted) {
         // 将账户列表转换为JSON
         final accountsJson = accounts.map((account) => account.toMap()).toList();
         final jsonString = jsonEncode(accountsJson);
@@ -203,7 +204,7 @@ class _AccountListPageState extends State<AccountListPage> {
   Future<void> _mergeData() async {
     try {
       // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
+      if (!await Permission.storage.request().isGranted) {
         // 选择文件
         FilePickerResult? result = await FilePicker.platform.pickFiles(
           type: FileType.custom,
