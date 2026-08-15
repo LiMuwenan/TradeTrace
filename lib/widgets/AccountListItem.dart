@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'package:password/model/AccountItem.dart';
+import 'package:everything_tool/model/AccountItem.dart';
 
 class AccountListItem extends StatefulWidget {
   final AccountItem account;

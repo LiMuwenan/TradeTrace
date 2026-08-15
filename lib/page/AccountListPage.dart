@@ -6,10 +6,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'dart:convert';
 
-import 'package:password/model/AccountItem.dart';
-import 'package:password/widgets/AccountDialog.dart';
-import 'package:password/widgets/AccountListItem.dart';
-import 'package:password/utils/SharedPreferencesHelper.dart';
+import 'package:everything_tool/model/AccountItem.dart';
+import 'package:everything_tool/widgets/AccountDialog.dart';
+import 'package:everything_tool/widgets/AccountListItem.dart';
+import 'package:everything_tool/utils/SharedPreferencesHelper.dart';
 
 class AccountListPage extends StatefulWidget {
   @override

@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
-
-import 'package:password/page/AccountListPage.dart';
+import 'package:everything_tool/page/HomePage.dart';
 
 void main() {
-  runApp(AccountManagerApp());
+  runApp(const EverythingToolApp());
 }
 
-class AccountManagerApp extends StatelessWidget {
+class EverythingToolApp extends StatelessWidget {
+  const EverythingToolApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '账号密码管理器',
+      title: 'EverythingTool',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        colorSchemeSeed: Colors.blue,
+        useMaterial3: true,
       ),
-      home: AccountListPage(),
+      home: const HomePage(),
     );
   }
 }

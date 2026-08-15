@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-import 'package:password/model/AccountItem.dart';
+import 'package:everything_tool/model/AccountItem.dart';
 
 class SharedPreferencesHelper {
   static const String _accountsKey = 'saved_accounts';
