@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'dart:io';
 import 'dart:convert';
@@ -92,37 +91,20 @@ class _AccountListPageState extends State<AccountListPage> {
   // 导出数据到JSON文件
   Future<void> _exportData() async {
     try {
-      // 请求存储权限
-      PermissionStatus status = await Permission.storage.request();
-      if (!status.isGranted) {
-        // 将账户列表转换为JSON
-        final accountsJson = accounts.map((account) => account.toMap()).toList();
-        final jsonString = jsonEncode(accountsJson);
+      final String? downloadsDir = await FilePicker.platform.getDirectoryPath();
+      if (downloadsDir == null) return; // 用户取消选择
 
-        // 获取下载目录
-        final String? downloadsDir = await FilePicker.platform.getDirectoryPath();
-        if (downloadsDir == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('无法访问存储目录')),
-          );
-          return;
-        }
+      final accountsJson = accounts.map((account) => account.toMap()).toList();
+      final jsonString = jsonEncode(accountsJson);
 
-        // 创建文件名（带时间戳）
-        final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-        final file = File('${downloadsDir}/account_backup_$timestamp.json');
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final file = File('${downloadsDir}/account_backup_$timestamp.json');
 
-        // 写入文件
-        await file.writeAsString(jsonString);
+      await file.writeAsString(jsonString);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('数据已导出到: ${file.path}')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('需要存储权限才能导出数据')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('数据已导出到: ${file.path}')),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('导出失败: $e')),
@@ -133,66 +115,53 @@ class _AccountListPageState extends State<AccountListPage> {
   // 从JSON文件导入数据
   Future<void> _importData() async {
     try {
-      // 请求存储权限
-      if (await Permission.storage.request().isGranted) {
-        // 选择文件
-        FilePickerResult? result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (result == null) return; // 用户取消选择
 
-        if (result != null) {
-          // 读取文件内容
-          final file = File(result.files.single.path!);
-          final jsonString = await file.readAsString();
+      final file = File(result.files.single.path!);
+      final jsonString = await file.readAsString();
 
-          // 解析JSON
-          final List<dynamic> jsonList = jsonDecode(jsonString);
-          final List<AccountItem> importedAccounts = jsonList
-              .map((item) => AccountItem.fromMap(item))
-              .toList();
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final List<AccountItem> importedAccounts = jsonList
+          .map((item) => AccountItem.fromMap(item))
+          .toList();
 
-          // 确认导入对话框
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: Text('导入确认'),
-                content: Text('将导入 ${importedAccounts.length} 个账号。这会覆盖当前所有数据，确定要继续吗？'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text('取消'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
+      // 确认导入对话框
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('导入确认'),
+            content: Text('将导入 ${importedAccounts.length} 个账号。这会覆盖当前所有数据，确定要继续吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('取消'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
 
-                      // 替换当前数据
-                      setState(() {
-                        accounts = importedAccounts;
-                      });
+                  setState(() {
+                    accounts = importedAccounts;
+                  });
 
-                      // 保存到本地存储
-                      await _dbHelper.saveAllAccountItems(accounts);
-                      _loadAccounts();
+                  await _dbHelper.saveAllAccountItems(accounts);
+                  _loadAccounts();
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('成功导入 ${importedAccounts.length} 个账号')),
-                      );
-                    },
-                    child: Text('确定导入', style: TextStyle(color: Colors.blue)),
-                  ),
-                ],
-              );
-            },
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('成功导入 ${importedAccounts.length} 个账号')),
+                  );
+                },
+                child: Text('确定导入', style: TextStyle(color: Colors.blue)),
+              ),
+            ],
           );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('需要存储权限才能导入数据')),
-        );
-      }
+        },
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('导入失败: $e')),
@@ -203,46 +172,32 @@ class _AccountListPageState extends State<AccountListPage> {
   // 合并导入数据（不覆盖现有数据）
   Future<void> _mergeData() async {
     try {
-      // 请求存储权限
-      if (!await Permission.storage.request().isGranted) {
-        // 选择文件
-        FilePickerResult? result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (result == null) return; // 用户取消选择
 
-        if (result != null) {
-          // 读取文件内容
-          final file = File(result.files.single.path!);
-          final jsonString = await file.readAsString();
+      final file = File(result.files.single.path!);
+      final jsonString = await file.readAsString();
 
-          // 解析JSON
-          final List<dynamic> jsonList = jsonDecode(jsonString);
-          final List<AccountItem> importedAccounts = jsonList
-              .map((item) => AccountItem.fromMap(item))
-              .toList();
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final List<AccountItem> importedAccounts = jsonList
+          .map((item) => AccountItem.fromMap(item))
+          .toList();
 
-          // 过滤掉已存在的账号（基于ID）
-          final newAccounts = importedAccounts.where(
-                  (imported) => !accounts.any((existing) => existing.id == imported.id)
-          ).toList();
+      final newAccounts = importedAccounts.where(
+        (imported) => !accounts.any((existing) => existing.id == imported.id),
+      ).toList();
 
-          // 添加新账号
-          accounts.addAll(newAccounts);
+      accounts.addAll(newAccounts);
 
-          // 保存到本地存储
-          await _dbHelper.saveAllAccountItems(accounts);
-          _loadAccounts();
+      await _dbHelper.saveAllAccountItems(accounts);
+      _loadAccounts();
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('成功合并 ${newAccounts.length} 个新账号')),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('需要存储权限才能导入数据')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('成功合并 ${newAccounts.length} 个新账号')),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('导入失败: $e')),
