@@ -202,7 +202,14 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
               SwitchListTile(
                 title: const Text('预期价格'),
                 value: _useExpected,
-                onChanged: (v) => setState(() => _useExpected = v),
+                onChanged: (v) {
+                  setState(() => _useExpected = v);
+                  if (v) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _calculateFromRatio();
+                    });
+                  }
+                },
                 contentPadding: EdgeInsets.zero,
               ),
               if (_useExpected) ...[

@@ -29,7 +29,12 @@ class _StockHomePageState extends State<StockHomePage> {
     final accounts = await _db.getAccounts();
     setState(() {
       _accounts = accounts;
-      if (_accounts.isNotEmpty && _selectedAccount == null) {
+      if (_accounts.isEmpty) {
+        _selectedAccount = null;
+        _stocks = [];
+        _summaries = {};
+      } else if (_selectedAccount == null ||
+          !_accounts.any((a) => a.id == _selectedAccount!.id)) {
         _selectedAccount = _accounts.first;
         _loadStocks();
       }
@@ -41,7 +46,7 @@ class _StockHomePageState extends State<StockHomePage> {
     final stocks = await _db.getStocksByAccount(_selectedAccount!.id!);
     final summaries = <int, Map<String, double>>{};
     for (final s in stocks) {
-      summaries[s.id!] = await _db.getStockSummary(s.id!);
+      summaries[s.id!] = await _db.getStockFifoSummary(s.id!);
     }
     setState(() {
       _stocks = stocks;
@@ -140,7 +145,11 @@ class _StockHomePageState extends State<StockHomePage> {
                                 value: a, child: Text(a.name));
                           }).toList(),
                           onChanged: (v) {
-                            setState(() => _selectedAccount = v);
+                            setState(() {
+                              _selectedAccount = v;
+                              _stocks = [];
+                              _summaries = {};
+                            });
                             if (v != null) _loadStocks();
                           },
                         ),
@@ -162,12 +171,13 @@ class _StockHomePageState extends State<StockHomePage> {
                           final totalShares = summary['total_shares'] ?? 0;
                           final totalCost = summary['total_cost'] ?? 0;
                           final avgCost = summary['avg_cost'] ?? 0;
+                          final cycleCost = summary['cycle_cost'] ?? 0;
                           return ListTile(
                             title: Text('${stock.name}${stock.code}'),
                             subtitle: Text(
-                              '持有: ${totalShares.toStringAsFixed(0)}股 | '
+                              '持仓: ${totalShares.toStringAsFixed(0)}股 | '
                               '成本: ${avgCost.toStringAsFixed(3)} | '
-                              '收益: ${totalCost >= 0 ? "+" : ""}${totalCost.toStringAsFixed(2)}',
+                              '收益: ${cycleCost >= 0 ? "+" : ""}${cycleCost.toStringAsFixed(2)}',
                             ),
                             trailing: Text(
                               totalCost >= 0

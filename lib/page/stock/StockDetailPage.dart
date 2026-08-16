@@ -29,7 +29,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
   Future<void> _loadData() async {
     final transactions = await _db.getTransactionTradesByStock(widget.stock.id!);
     final tTrades = await _db.getTTradesWithDetails(widget.stock.id!);
-    final summary = await _db.getStockSummary(widget.stock.id!);
+    final summary = await _db.getStockFifoSummary(widget.stock.id!);
     setState(() {
       _transactions = transactions;
       _tTrades = tTrades;
@@ -167,19 +167,44 @@ class _StockDetailPageState extends State<StockDetailPage> {
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            child: Column(
               children: [
-                _buildSummaryItem(
-                    '持有', '${_holding.toStringAsFixed(0)}股'),
-                _buildSummaryItem(
-                    '成本', (_summary['avg_cost'] ?? 0).toStringAsFixed(3)),
-                _buildSummaryItem(
-                  '收益',
-                  _cumulativeCost >= 0
-                      ? '+${_cumulativeCost.toStringAsFixed(2)}'
-                      : _cumulativeCost.toStringAsFixed(2),
-                  _cumulativeCost >= 0 ? Colors.red : Colors.green,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildSummaryItem(
+                        '持有', '${_holding.toStringAsFixed(0)}股'),
+                    _buildSummaryItem(
+                        '持仓成本', (_summary['avg_cost'] ?? 0).toStringAsFixed(3)),
+                    _buildSummaryItem(
+                      '持仓收益',
+                      (_summary['cycle_cost'] ?? 0) >= 0
+                          ? '+${(_summary['cycle_cost'] ?? 0).toStringAsFixed(2)}'
+                          : (_summary['cycle_cost'] ?? 0).toStringAsFixed(2),
+                      (_summary['cycle_cost'] ?? 0) >= 0 ? Colors.red : Colors.green,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildSummaryItem(
+                      '总成本',
+                      (_summary['total_shares_all'] ?? 0) == 0
+                          ? '0.00'
+                          : (_summary['total_avg_cost'] ?? 0).toStringAsFixed(3),
+                    ),
+                    _buildSummaryItem(
+                      '总收益',
+                      _cumulativeCost >= 0
+                          ? '+${_cumulativeCost.toStringAsFixed(2)}'
+                          : _cumulativeCost.toStringAsFixed(2),
+                      _cumulativeCost >= 0 ? Colors.red : Colors.green,
+                    ),
+                  ],
                 ),
               ],
             ),

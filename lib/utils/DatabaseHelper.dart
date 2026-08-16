@@ -226,6 +226,55 @@ class DatabaseHelper {
     };
   }
 
+  /// 建仓计算：按建仓周期追踪持仓成本
+  /// 当持仓股数从 0 变为正数时视为建仓，归零时视为清仓
+  /// 持仓成本 = 建仓周期累计费用 / 持仓股数（卖出利润会拉低成本）
+  Future<Map<String, double>> getStockFifoSummary(int stockId) async {
+    final transactions = await getTransactionTradesByStock(stockId);
+
+    double allTimeCost = 0;
+    int allTimeShares = 0;
+    int currentShares = 0;
+    double currentCycleCost = 0;
+    bool inCycle = false;
+
+    for (final t in transactions) {
+      allTimeCost += t.cost;
+      allTimeShares += t.shares;
+
+      if (t.type == '买入') {
+        if (!inCycle && t.shares > 0) {
+          currentCycleCost = 0;
+          currentShares = 0;
+          inCycle = true;
+        }
+        currentShares += t.shares;
+        currentCycleCost += t.cost;
+      } else {
+        currentShares += t.shares;
+        currentCycleCost += t.cost;
+
+        if (currentShares == 0) {
+          inCycle = false;
+        }
+      }
+    }
+
+    final double avgCost =
+        currentShares > 0 ? (currentCycleCost / currentShares).abs() : 0;
+    final double allTimeAvgCost =
+        allTimeShares != 0 ? (allTimeCost / allTimeShares).abs() : 0;
+
+    return {
+      'total_shares': currentShares.toDouble(),
+      'total_cost': allTimeCost,
+      'avg_cost': avgCost,
+      'cycle_cost': currentCycleCost,
+      'total_shares_all': allTimeShares.toDouble(),
+      'total_avg_cost': allTimeAvgCost,
+    };
+  }
+
   /// 账户维度收益
   Future<Map<String, double>> getAccountProfit(int accountId) async {
     final db = await database;
