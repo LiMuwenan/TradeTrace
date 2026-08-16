@@ -6,6 +6,7 @@ import 'package:everything_tool/model/StockModels.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
+  static final int _version = 5;
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
@@ -21,29 +22,33 @@ class DatabaseHelper {
     final dir = await getApplicationDocumentsDirectory();
     final path = join(dir.path, 'stock_trading.db');
     return await databaseFactoryFfi.openDatabase(path,
-        options: OpenDatabaseOptions(version: 1, onCreate: _onCreate));
+        options: OpenDatabaseOptions(
+          version: _version,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+        ));
   }
 
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE accounts (
+      CREATE TABLE t_accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         created_at TEXT NOT NULL
       )
     ''');
     await db.execute('''
-      CREATE TABLE stocks (
+      CREATE TABLE t_stocks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         account_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         code TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+        FOREIGN KEY (account_id) REFERENCES t_accounts(id) ON DELETE CASCADE
       )
     ''');
     await db.execute('''
-      CREATE TABLE TransactionTrades (
+      CREATE TABLE t_transaction_trades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         stock_id INTEGER NOT NULL,
         date TEXT NOT NULL,
@@ -58,48 +63,143 @@ class DatabaseHelper {
         expected_sell_high REAL,
         note TEXT,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (stock_id) REFERENCES stocks(id) ON DELETE CASCADE
+        FOREIGN KEY (stock_id) REFERENCES t_stocks(id) ON DELETE CASCADE
       )
     ''');
     await db.execute('''
       CREATE TABLE t_trades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        buy_TransactionTrade_id INTEGER NOT NULL,
-        sell_TransactionTrade_id INTEGER NOT NULL,
+        buy_transaction_id INTEGER NOT NULL,
+        sell_transaction_id INTEGER NOT NULL,
         shares INTEGER NOT NULL,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (buy_TransactionTrade_id) REFERENCES TransactionTrades(id) ON DELETE CASCADE,
-        FOREIGN KEY (sell_TransactionTrade_id) REFERENCES TransactionTrades(id) ON DELETE CASCADE
+        FOREIGN KEY (buy_transaction_id) REFERENCES t_transaction_trades(id) ON DELETE CASCADE,
+        FOREIGN KEY (sell_transaction_id) REFERENCES t_transaction_trades(id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 10) {
+      await _migrateV1ToV2(db);
+    }
+  }
+
+  Future<void> _migrateV1ToV2(Database db) async {
+    // 检查旧表是否存在，存在则迁移数据
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('accounts', 'stocks', 'TransactionTrades', 'trades')"
+    );
+    final oldTableNames = tables.map((t) => t['name'] as String).toSet();
+    if (oldTableNames.isEmpty) return;
+
+    // 1. accounts → t_accounts
+    if (oldTableNames.contains('accounts')) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS t_accounts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute(
+        'INSERT INTO t_accounts (id, name, created_at) SELECT id, name, created_at FROM accounts'
+      );
+      await db.execute('DROP TABLE accounts');
+    }
+
+    // 2. stocks → t_stocks
+    if (oldTableNames.contains('stocks')) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS t_stocks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          code TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (account_id) REFERENCES t_accounts(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute(
+        'INSERT INTO t_stocks (id, account_id, name, code, created_at) SELECT id, account_id, name, code, created_at FROM stocks'
+      );
+      await db.execute('DROP TABLE stocks');
+    }
+
+    // 3. TransactionTrades → t_transaction_trades
+    if (oldTableNames.contains('TransactionTrades')) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS t_transaction_trades (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          stock_id INTEGER NOT NULL,
+          date TEXT NOT NULL,
+          price REAL NOT NULL,
+          shares INTEGER NOT NULL,
+          commission REAL DEFAULT 0,
+          type TEXT NOT NULL,
+          expected_range TEXT,
+          expected_buy_low REAL,
+          expected_buy_high REAL,
+          expected_sell_low REAL,
+          expected_sell_high REAL,
+          note TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (stock_id) REFERENCES t_stocks(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute(
+        'INSERT INTO t_transaction_trades (id, stock_id, date, price, shares, commission, type, expected_range, expected_buy_low, expected_buy_high, expected_sell_low, expected_sell_high, note, created_at) SELECT id, stock_id, date, price, shares, commission, type, expected_range, expected_buy_low, expected_buy_high, expected_sell_low, expected_sell_high, note, created_at FROM TransactionTrades'
+      );
+      await db.execute('DROP TABLE TransactionTrades');
+
+    }
+
+    // 4. trades → t_trades（字段名变更：buy_TransactionTrade_id → buy_transaction_id）
+    if (oldTableNames.contains('trades')) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS t_trades (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          buy_transaction_id INTEGER NOT NULL,
+          sell_transaction_id INTEGER NOT NULL,
+          shares INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (buy_transaction_id) REFERENCES t_transaction_trades(id) ON DELETE CASCADE,
+          FOREIGN KEY (sell_transaction_id) REFERENCES t_transaction_trades(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute(
+        'INSERT INTO t_trades (id, buy_transaction_id, sell_transaction_id, shares, created_at) SELECT id, buy_TransactionTrade_id, sell_transaction_id, shares, created_at FROM trades'
+      );
+      await db.execute('DROP TABLE trades');
+    }
   }
 
   // ========== Account CRUD ==========
   Future<int> insertAccount(Account account) async {
     final db = await database;
-    return await db.insert('accounts', account.toMap());
+    return await db.insert('t_accounts', account.toMap());
   }
 
   Future<List<Account>> getAccounts() async {
     final db = await database;
-    final maps = await db.query('accounts', orderBy: 'id');
+    final maps = await db.query('t_accounts', orderBy: 'id');
     return maps.map((m) => Account.fromMap(m)).toList();
   }
 
   Future<int> deleteAccount(int id) async {
     final db = await database;
-    return await db.delete('accounts', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('t_accounts', where: 'id = ?', whereArgs: [id]);
   }
 
   // ========== Stock CRUD ==========
   Future<int> insertStock(Stock stock) async {
     final db = await database;
-    return await db.insert('stocks', stock.toMap());
+    return await db.insert('t_stocks', stock.toMap());
   }
 
   Future<List<Stock>> getStocksByAccount(int accountId) async {
     final db = await database;
-    final maps = await db.query('stocks',
+    final maps = await db.query('t_stocks',
         where: 'account_id = ?',
         whereArgs: [accountId],
         orderBy: 'created_at DESC');
@@ -108,29 +208,29 @@ class DatabaseHelper {
 
   Future<int> deleteStock(int id) async {
     final db = await database;
-    return await db.delete('stocks', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('t_stocks', where: 'id = ?', whereArgs: [id]);
   }
 
   // ========== TransactionTrade CRUD ==========
   Future<int> insertTransactionTrade(TransactionTrade t) async {
     final db = await database;
-    return await db.insert('TransactionTrades', t.toMap());
+    return await db.insert('t_transaction_trades', t.toMap());
   }
 
   Future<int> updateTransactionTrade(TransactionTrade t) async {
     final db = await database;
-    return await db.update('TransactionTrades', t.toMap(),
+    return await db.update('t_transaction_trades', t.toMap(),
         where: 'id = ?', whereArgs: [t.id]);
   }
 
   Future<int> deleteTransactionTrade(int id) async {
     final db = await database;
-    return await db.delete('TransactionTrades', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('t_transaction_trades', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<TransactionTrade>> getTransactionTradesByStock(int stockId) async {
     final db = await database;
-    final maps = await db.query('TransactionTrades',
+    final maps = await db.query('t_transaction_trades',
         where: 'stock_id = ?',
         whereArgs: [stockId],
         orderBy: 'date ASC');
@@ -140,7 +240,7 @@ class DatabaseHelper {
   Future<TransactionTrade?> getTransactionTradeById(int id) async {
     final db = await database;
     final maps =
-        await db.query('TransactionTrades', where: 'id = ?', whereArgs: [id]);
+        await db.query('t_transaction_trades', where: 'id = ?', whereArgs: [id]);
     if (maps.isEmpty) return null;
     return TransactionTrade.fromMap(maps.first);
   }
@@ -149,7 +249,7 @@ class DatabaseHelper {
   Future<List<TransactionTrade>> getAvailableBuyTransactionTrades(
       int stockId, int? excludeSellId) async {
     final db = await database;
-    final buys = await db.query('TransactionTrades',
+    final buys = await db.query('t_transaction_trades',
         where: 'stock_id = ? AND type = ?',
         whereArgs: [stockId, '买入'],
         orderBy: 'date ASC');
@@ -160,8 +260,8 @@ class DatabaseHelper {
       int linkedShares = 0;
       for (final tt in tTrades) {
         final ttShares = tt['shares'] as int;
-        if (tt['buy_TransactionTrade_id'] == t.id &&
-            tt['sell_TransactionTrade_id'] != excludeSellId) {
+        if (tt['buy_transaction_id'] == t.id &&
+            tt['sell_transaction_id'] != excludeSellId) {
           linkedShares += ttShares;
         }
       }
@@ -190,8 +290,8 @@ class DatabaseHelper {
         b.price as buy_price, b.shares as buy_shares, b.commission as buy_commission, b.date as buy_date,
         s.price as sell_price, s.shares as sell_shares, s.commission as sell_commission, s.date as sell_date
       FROM t_trades tt
-      JOIN TransactionTrades b ON tt.buy_TransactionTrade_id = b.id
-      JOIN TransactionTrades s ON tt.sell_TransactionTrade_id = s.id
+      JOIN t_transaction_trades b ON tt.buy_transaction_id = b.id
+      JOIN t_transaction_trades s ON tt.sell_transaction_id = s.id
       WHERE b.stock_id = ?
       ORDER BY tt.created_at ASC
     ''', [stockId]);
@@ -202,7 +302,7 @@ class DatabaseHelper {
   Future<void> deleteTTradesBySellId(int sellId) async {
     final db = await database;
     await db.delete('t_trades',
-        where: 'sell_TransactionTrade_id = ?', whereArgs: [sellId]);
+        where: 'sell_transaction_id = ?', whereArgs: [sellId]);
   }
 
   // ========== 收益统计 ==========
@@ -214,7 +314,7 @@ class DatabaseHelper {
       SELECT 
         COALESCE(SUM(shares), 0) as total_shares,
         COALESCE(SUM(-price * shares - commission), 0) as total_cost
-      FROM TransactionTrades
+      FROM t_transaction_trades
       WHERE stock_id = ?
     ''', [stockId]);
     final shares = (result.first['total_shares'] as num).toDouble();
@@ -280,8 +380,8 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.rawQuery('''
       SELECT COALESCE(SUM(-t.price * t.shares - t.commission), 0) as profit
-      FROM TransactionTrades t
-      JOIN stocks s ON t.stock_id = s.id
+      FROM t_transaction_trades t
+      JOIN t_stocks s ON t.stock_id = s.id
       WHERE s.account_id = ?
     ''', [accountId]);
     return {'profit': (result.first['profit'] as num).toDouble()};
@@ -296,8 +396,8 @@ class DatabaseHelper {
         b.price as buy_price, b.shares as buy_shares, b.commission as buy_commission,
         s.price as sell_price, s.shares as sell_shares, s.commission as sell_commission
       FROM t_trades tt
-      JOIN TransactionTrades b ON tt.buy_TransactionTrade_id = b.id
-      JOIN TransactionTrades s ON tt.sell_TransactionTrade_id = s.id
+      JOIN t_transaction_trades b ON tt.buy_transaction_id = b.id
+      JOIN t_transaction_trades s ON tt.sell_transaction_id = s.id
       WHERE tt.id = ?
     ''', [ttradeId]);
     if (result.isEmpty) return 0;
