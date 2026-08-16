@@ -1,6 +1,6 @@
-# password
+# everything-tool
 
-Flutter App. Save Password
+Flutter App. Manage tools
 
 ## Getting Started
 

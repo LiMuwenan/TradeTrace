@@ -1,4 +1,4 @@
-package com.ligen.password;
+package com.ligen.tools;
 
 import io.flutter.embedding.android.FlutterActivity;
 
