@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'package:everything_tool/model/AccountItem.dart';
 import 'package:everything_tool/widgets/AccountDialog.dart';
 import 'package:everything_tool/widgets/AccountListItem.dart';
-import 'package:everything_tool/utils/SharedPreferencesHelper.dart';
+import 'package:everything_tool/utils/DatabaseHelper.dart';
 
 class AccountListPage extends StatefulWidget {
   @override
@@ -20,7 +20,7 @@ class _AccountListPageState extends State<AccountListPage> {
   List<AccountItem> accounts = [];
   List<AccountItem> filteredAccounts = [];
   TextEditingController searchController = TextEditingController();
-  final SharedPreferencesHelper _prefsHelper = SharedPreferencesHelper();
+  final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
   void initState() {
@@ -32,7 +32,7 @@ class _AccountListPageState extends State<AccountListPage> {
   }
 
   Future<void> _loadAccounts() async {
-    List<AccountItem> loadedAccounts = await _prefsHelper.getAccounts();
+    List<AccountItem> loadedAccounts = await _dbHelper.getAccountItems();
     setState(() {
       accounts = loadedAccounts;
       filteredAccounts = accounts;
@@ -65,7 +65,7 @@ class _AccountListPageState extends State<AccountListPage> {
               existingItem.appName = newAppName;
               existingItem.username = newUsername;
               existingItem.password = newPassword;
-              await _prefsHelper.saveAccounts(accounts);
+              await _dbHelper.saveAllAccountItems(accounts);
             } else {
               // 添加新项
               AccountItem newAccount = AccountItem(
@@ -74,7 +74,7 @@ class _AccountListPageState extends State<AccountListPage> {
                 password: newPassword,
               );
               accounts.add(newAccount);
-              await _prefsHelper.saveAccounts(accounts);
+              await _dbHelper.saveAllAccountItems(accounts);
             }
             _loadAccounts(); // 重新加载列表
           },
@@ -85,7 +85,7 @@ class _AccountListPageState extends State<AccountListPage> {
 
   void _deleteAccount(String id) async {
     accounts.removeWhere((account) => account.id == id);
-    await _prefsHelper.saveAccounts(accounts);
+    await _dbHelper.saveAllAccountItems(accounts);
     _loadAccounts(); // 重新加载列表
   }
 
@@ -174,7 +174,7 @@ class _AccountListPageState extends State<AccountListPage> {
                       });
 
                       // 保存到本地存储
-                      await _prefsHelper.saveAccounts(accounts);
+                      await _dbHelper.saveAllAccountItems(accounts);
                       _loadAccounts();
 
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -231,7 +231,7 @@ class _AccountListPageState extends State<AccountListPage> {
           accounts.addAll(newAccounts);
 
           // 保存到本地存储
-          await _prefsHelper.saveAccounts(accounts);
+          await _dbHelper.saveAllAccountItems(accounts);
           _loadAccounts();
 
           ScaffoldMessenger.of(context).showSnackBar(

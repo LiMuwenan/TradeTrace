@@ -3,10 +3,11 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:everything_tool/model/StockModels.dart';
+import 'package:everything_tool/model/AccountItem.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
-  static final int _version = 5;
+  static final int _version = 9;
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
@@ -77,11 +78,31 @@ class DatabaseHelper {
         FOREIGN KEY (sell_transaction_id) REFERENCES t_transaction_trades(id) ON DELETE CASCADE
       )
     ''');
+    await db.execute('''
+      CREATE TABLE t_password_account (
+        id TEXT PRIMARY KEY,
+        app_name TEXT NOT NULL,
+        username TEXT NOT NULL,
+        password TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 10) {
+    if (oldVersion < 8) {
       await _migrateV1ToV2(db);
+    }
+    if (oldVersion < 8) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS t_password_account (
+          id TEXT PRIMARY KEY,
+          app_name TEXT NOT NULL,
+          username TEXT NOT NULL,
+          password TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
     }
   }
 
@@ -412,5 +433,66 @@ class DatabaseHelper {
     final buyCommRatio = buyShares != 0 ? buyComm * (tShares / buyShares.abs()) : 0.0;
     final sellCommRatio = sellShares != 0 ? sellComm * (tShares / sellShares.abs()) : 0.0;
     return (sellPrice - buyPrice) * tShares - buyCommRatio - sellCommRatio;
+  }
+
+  // ========== AccountItem (密码管理) CRUD ==========
+
+  Future<void> insertAccountItem(AccountItem item) async {
+    final db = await database;
+    await db.insert('t_password_account', {
+      'id': item.id,
+      'app_name': item.appName,
+      'username': item.username,
+      'password': item.password,
+      'created_at': item.createdAt.toIso8601String(),
+    });
+  }
+
+  Future<void> updateAccountItem(AccountItem item) async {
+    final db = await database;
+    await db.update(
+      't_password_account',
+      {
+        'app_name': item.appName,
+        'username': item.username,
+        'password': item.password,
+        'created_at': item.createdAt.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+  }
+
+  Future<void> deleteAccountItem(String id) async {
+    final db = await database;
+    await db.delete('t_password_account', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<AccountItem>> getAccountItems() async {
+    final db = await database;
+    final maps = await db.query('t_password_account', orderBy: 'created_at DESC');
+    return maps.map((m) => AccountItem.fromMap({
+      'id': m['id'],
+      'appName': m['app_name'],
+      'username': m['username'],
+      'password': m['password'],
+      'createdAt': m['created_at'],
+    })).toList();
+  }
+
+  Future<void> saveAllAccountItems(List<AccountItem> items) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('t_password_account');
+      for (final item in items) {
+        await txn.insert('t_password_account', {
+          'id': item.id,
+          'app_name': item.appName,
+          'username': item.username,
+          'password': item.password,
+          'created_at': item.createdAt.toIso8601String(),
+        });
+      }
+    });
   }
 }
