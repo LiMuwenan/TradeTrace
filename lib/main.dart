@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:everything_tool/page/HomePage.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
   runApp(const EverythingToolApp());
 }
 

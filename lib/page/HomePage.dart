@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:everything_tool/page/AccountListPage.dart';
+import 'package:everything_tool/page/stock/StockHomePage.dart';
 
 /// 工具项配置模型
 class ToolItem {
@@ -35,10 +36,20 @@ class _HomePageState extends State<HomePage> {
       description: '账号密码存储',
       pageBuilder: _buildPasswordPage,
     ),
+    ToolItem(
+      name: '股票记录',
+      icon: Icons.trending_up,
+      description: '交易日志与做T',
+      pageBuilder: _buildStockPage,
+    ),
   ];
 
   static Widget _buildPasswordPage(BuildContext context) {
     return AccountListPage();
+  }
+
+  static Widget _buildStockPage(BuildContext context) {
+    return const StockHomePage();
   }
 
   @override

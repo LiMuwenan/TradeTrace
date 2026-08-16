@@ -15,5 +15,8 @@ void main() {
 
     // 验证密码管理工具卡片存在
     expect(find.text('密码管理'), findsOneWidget);
+
+    // 验证股票记录工具卡片存在
+    expect(find.text('股票记录'), findsOneWidget);
   });
 }
