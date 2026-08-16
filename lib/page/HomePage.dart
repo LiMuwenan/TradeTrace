@@ -194,24 +194,24 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(12),
         onTap: () => _navigateToTool(tool),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   tool.icon,
-                  size: 28,
+                  size: 24,
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 tool.name,
                 style: const TextStyle(
@@ -220,7 +220,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 tool.description,
                 style: TextStyle(
