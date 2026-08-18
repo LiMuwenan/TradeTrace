@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:everything_tool/page/AccountListPage.dart';
 import 'package:everything_tool/page/stock/StockHomePage.dart';
+import 'package:everything_tool/page/SettingsPage.dart';
+import 'package:everything_tool/utils/SyncService.dart';
 
 /// 工具项配置模型
 class ToolItem {
@@ -27,6 +29,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   List<ToolItem> _filteredTools = [];
+  bool _isUploading = false;
+  bool _isDownloading = false;
 
   /// 工具注册表 — 新增工具只需在此列表添加一项
   final List<ToolItem> _tools = const [
@@ -76,6 +80,47 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _upload() async {
+    setState(() => _isUploading = true);
+    try {
+      await SyncService.instance.init();
+      final result = await SyncService.instance.upload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result)),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
+    }
+  }
+
+  Future<void> _download() async {
+    setState(() => _isDownloading = true);
+    try {
+      await SyncService.instance.init();
+      final result = await SyncService.instance.download();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result)),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
+  }
+
+  void _navigateToSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -89,10 +134,34 @@ class _HomePageState extends State<HomePage> {
         title: const Text('EverythingTool'),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: _isUploading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_upload),
+            tooltip: '上传',
+            onPressed: _isUploading ? null : _upload,
+          ),
+          IconButton(
+            icon: _isDownloading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download),
+            tooltip: '下载',
+            onPressed: _isDownloading ? null : _download,
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              if (value == 'about') {
+              if (value == 'settings') {
+                _navigateToSettings();
+              } else if (value == 'about') {
                 showAboutDialog(
                   context: context,
                   applicationName: 'EverythingTool',
@@ -104,6 +173,7 @@ class _HomePageState extends State<HomePage> {
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(value: 'settings', child: Text('设置')),
               const PopupMenuItem(value: 'about', child: Text('关于')),
             ],
           ),

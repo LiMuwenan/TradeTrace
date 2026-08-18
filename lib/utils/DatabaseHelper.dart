@@ -7,11 +7,12 @@ import 'package:everything_tool/model/AccountItem.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
-  static final int _version = 9;
+  static final int _version = 10;
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
   static Database? _database;
+  static String? _dbPath;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -19,15 +20,30 @@ class DatabaseHelper {
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
+  /// 获取数据库文件路径
+  Future<String> getDbPath() async {
+    if (_dbPath != null) return _dbPath!;
     final dir = await getApplicationDocumentsDirectory();
-    final path = join(dir.path, 'stock_trading.db');
+    _dbPath = join(dir.path, 'stock_trading.db');
+    return _dbPath!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final path = await getDbPath();
     return await databaseFactoryFfi.openDatabase(path,
         options: OpenDatabaseOptions(
           version: _version,
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
         ));
+  }
+
+  /// 关闭数据库（用于同步时替换文件）
+  Future<void> closeDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
