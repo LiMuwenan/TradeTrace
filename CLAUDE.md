@@ -64,7 +64,7 @@ shares INTEGER, created_at TEXT
 ### 统计口径（改前必读对应方法）
 
 - `getStockFifoSummary(stockId)`：建仓周期成本追踪。`shares` 0→正视为建仓、归零视为清仓；持仓成本 = 周期累计费用 / 持仓股数。
-- 返回键含义：`total_shares`(当前持仓) / `total_cost`(累计费用) / `avg_cost`(当前持仓成本) / `cycle_cost`(本周期费用) / `total_shares_all`(累计股数) / `total_avg_cost`(累计均价)。
+- 返回键含义：`total_shares`(当前持仓) / `total_cost`(累计费用) / `avg_cost`(当前持仓成本) / `cycle_cost`(本周期费用) / `total_avg_cost`(累计成本)。
 - `getStockSummary`：简单 `SUM(shares)` 与 `SUM(-price*shares-commission)`。
 - `getTTradeProfit`：做T每笔收益，买卖手续费按份额比例分摊。
 - 页面展示成本/收益时，务必与这些方法对齐，避免 Login 前后口径不一致。

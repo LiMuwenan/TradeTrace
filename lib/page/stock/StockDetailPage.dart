@@ -27,7 +27,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
   }
 
   Future<void> _loadData() async {
-    final transactions = await _db.getTransactionTradesByStock(widget.stock.id!);
+    final transactions = await _db.getTransactionTradesByStock(widget.stock.id!, 'DESC');
     final tTrades = await _db.getTTradesWithDetails(widget.stock.id!);
     final summary = await _db.getStockFifoSummary(widget.stock.id!);
     setState(() {
@@ -151,7 +151,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
                   children: [
                     _buildSummaryItem(
                       '总成本',
-                      (_summary['total_shares_all'] ?? 0) == 0
+                      (_summary['total_shares'] ?? 0) == 0
                           ? '0.00'
                           : (_summary['total_avg_cost'] ?? 0).toStringAsFixed(3),
                     ),
@@ -161,6 +161,13 @@ class _StockDetailPageState extends State<StockDetailPage> {
                           ? '+${_cumulativeCost.toStringAsFixed(2)}'
                           : _cumulativeCost.toStringAsFixed(2),
                       _cumulativeCost >= 0 ? Colors.red : Colors.green,
+                    ),
+                    _buildSummaryItem(
+                      '清仓收益',
+                        (_cumulativeCost-(_summary['cycle_cost'] ?? 0)) >= 0
+                          ? '+${(_cumulativeCost-(_summary['cycle_cost'] ?? 0)).toStringAsFixed(2)}'
+                          : (_cumulativeCost-(_summary['cycle_cost'] ?? 0)).toStringAsFixed(2),
+                      (_cumulativeCost-(_summary['cycle_cost'] ?? 0)) >= 0 ? Colors.red : Colors.green,
                     ),
                   ],
                 ),
