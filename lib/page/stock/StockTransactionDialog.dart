@@ -22,6 +22,7 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
   final _priceController = TextEditingController();
   final _sharesController = TextEditingController();
   final _commissionController = TextEditingController();
+  final _dividendController = TextEditingController();
   final _noteController = TextEditingController();
   String _type = '买入';
   bool _useExpected = false;
@@ -35,6 +36,8 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
 
   bool _calculating = false;
 
+  bool get _isDividend => _type == '股息';
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +47,7 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
       _priceController.text = t.price.toString();
       _sharesController.text = t.shares.abs().toString();
       _commissionController.text = t.commission.toString();
+      _dividendController.text = t.dividend?.toString() ?? '';
       _noteController.text = t.note ?? '';
       _type = t.type;
       _useExpected = t.expectedRange != null;
@@ -108,35 +112,54 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    final price = double.parse(_priceController.text);
-    final absShares = int.parse(_sharesController.text);
-    final shares = _type == '买入' ? absShares : -absShares;
-    final commission = double.tryParse(_commissionController.text) ?? 0;
-    final txn = TransactionTrade(
-      id: widget.transaction?.id,
-      stockId: widget.stockId,
-      date: DateFormat('yyyy-MM-dd').format(_date),
-      price: price,
-      shares: shares,
-      commission: commission,
-      type: _type,
-      expectedRange: _useExpected ? _ratioController.text : null,
-      expectedBuyLow:
-          _useExpected ? double.tryParse(_expectedBuyLowController.text) : null,
-      expectedBuyHigh: _useExpected
-          ? double.tryParse(_expectedBuyHighController.text)
-          : null,
-      expectedSellLow: _useExpected
-          ? double.tryParse(_expectedSellLowController.text)
-          : null,
-      expectedSellHigh: _useExpected
-          ? double.tryParse(_expectedSellHighController.text)
-          : null,
-      note: _noteController.text.isNotEmpty ? _noteController.text : null,
-      createdAt:
-          widget.transaction?.createdAt ?? DateTime.now().toIso8601String(),
-    );
-    Navigator.pop(context, txn);
+
+    if (_isDividend) {
+      final dividend = double.tryParse(_dividendController.text) ?? 0;
+      final txn = TransactionTrade(
+        id: widget.transaction?.id,
+        stockId: widget.stockId,
+        date: DateFormat('yyyy-MM-dd').format(_date),
+        price: 0,
+        shares: 0,
+        commission: 0,
+        type: _type,
+        dividend: dividend,
+        note: _noteController.text.isNotEmpty ? _noteController.text : null,
+        createdAt:
+            widget.transaction?.createdAt ?? DateTime.now().toIso8601String(),
+      );
+      Navigator.pop(context, txn);
+    } else {
+      final price = double.parse(_priceController.text);
+      final absShares = int.parse(_sharesController.text);
+      final shares = _type == '买入' ? absShares : -absShares;
+      final commission = double.tryParse(_commissionController.text) ?? 0;
+      final txn = TransactionTrade(
+        id: widget.transaction?.id,
+        stockId: widget.stockId,
+        date: DateFormat('yyyy-MM-dd').format(_date),
+        price: price,
+        shares: shares,
+        commission: commission,
+        type: _type,
+        expectedRange: _useExpected ? _ratioController.text : null,
+        expectedBuyLow:
+            _useExpected ? double.tryParse(_expectedBuyLowController.text) : null,
+        expectedBuyHigh: _useExpected
+            ? double.tryParse(_expectedBuyHighController.text)
+            : null,
+        expectedSellLow: _useExpected
+            ? double.tryParse(_expectedSellLowController.text)
+            : null,
+        expectedSellHigh: _useExpected
+            ? double.tryParse(_expectedSellHighController.text)
+            : null,
+        note: _noteController.text.isNotEmpty ? _noteController.text : null,
+        createdAt:
+            widget.transaction?.createdAt ?? DateTime.now().toIso8601String(),
+      );
+      Navigator.pop(context, txn);
+    }
   }
 
   @override
@@ -144,6 +167,7 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
     _priceController.dispose();
     _sharesController.dispose();
     _commissionController.dispose();
+    _dividendController.dispose();
     _noteController.dispose();
     _ratioController.dispose();
     _expectedBuyLowController.dispose();
@@ -174,92 +198,104 @@ class _StockTransactionDialogState extends State<StockTransactionDialog> {
                 segments: const [
                   ButtonSegment(value: '买入', label: Text('买入')),
                   ButtonSegment(value: '卖出', label: Text('卖出')),
+                  ButtonSegment(value: '股息', label: Text('股息')),
                 ],
                 selected: {_type},
                 onSelectionChanged: (v) => setState(() => _type = v.first),
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _priceController,
-                decoration: const InputDecoration(labelText: '价格'),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) => (v == null || v.isEmpty) ? '请输入价格' : null,
-              ),
-              TextFormField(
-                controller: _sharesController,
-                decoration: const InputDecoration(labelText: '股数'),
-                keyboardType: TextInputType.number,
-                validator: (v) => (v == null || v.isEmpty) ? '请输入股数' : null,
-              ),
-              TextFormField(
-                controller: _commissionController,
-                decoration: const InputDecoration(labelText: '手续费'),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text('预期价格'),
-                value: _useExpected,
-                onChanged: (v) {
-                  setState(() => _useExpected = v);
-                  if (v) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _calculateFromRatio();
-                    });
-                  }
-                },
-                contentPadding: EdgeInsets.zero,
-              ),
-              if (_useExpected) ...[
+              if (_isDividend)
                 TextFormField(
-                  controller: _ratioController,
-                  decoration: const InputDecoration(
-                    labelText: '预期比例范围 (如 0.015-0.02)',
+                  controller: _dividendController,
+                  decoration: const InputDecoration(labelText: '股息金额'),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? '请输入股息金额' : null,
+                )
+              else ...[
+                TextFormField(
+                  controller: _priceController,
+                  decoration: const InputDecoration(labelText: '价格'),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) => (v == null || v.isEmpty) ? '请输入价格' : null,
+                ),
+                TextFormField(
+                  controller: _sharesController,
+                  decoration: const InputDecoration(labelText: '股数'),
+                  keyboardType: TextInputType.number,
+                  validator: (v) => (v == null || v.isEmpty) ? '请输入股数' : null,
+                ),
+                TextFormField(
+                  controller: _commissionController,
+                  decoration: const InputDecoration(labelText: '手续费'),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text('预期价格'),
+                  value: _useExpected,
+                  onChanged: (v) {
+                    setState(() => _useExpected = v);
+                    if (v) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _calculateFromRatio();
+                      });
+                    }
+                  },
+                  contentPadding: EdgeInsets.zero,
+                ),
+                if (_useExpected) ...[
+                  TextFormField(
+                    controller: _ratioController,
+                    decoration: const InputDecoration(
+                      labelText: '预期比例范围 (如 0.015-0.02)',
+                    ),
+                    onChanged: (_) => _calculateFromRatio(),
                   ),
-                  onChanged: (_) => _calculateFromRatio(),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _expectedBuyLowController,
-                        decoration: const InputDecoration(labelText: '预期买入低'),
-                        onChanged: (_) => _calculateFromPrice(),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _expectedBuyLowController,
+                          decoration: const InputDecoration(labelText: '预期买入低'),
+                          onChanged: (_) => _calculateFromPrice(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _expectedBuyHighController,
-                        decoration: const InputDecoration(labelText: '预期买入高'),
-                        onChanged: (_) => _calculateFromPrice(),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _expectedBuyHighController,
+                          decoration: const InputDecoration(labelText: '预期买入高'),
+                          onChanged: (_) => _calculateFromPrice(),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _expectedSellLowController,
-                        decoration: const InputDecoration(labelText: '预期卖出低'),
-                        onChanged: (_) => _calculateFromPrice(),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _expectedSellLowController,
+                          decoration: const InputDecoration(labelText: '预期卖出低'),
+                          onChanged: (_) => _calculateFromPrice(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _expectedSellHighController,
-                        decoration: const InputDecoration(labelText: '预期卖出高'),
-                        onChanged: (_) => _calculateFromPrice(),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _expectedSellHighController,
+                          decoration: const InputDecoration(labelText: '预期卖出高'),
+                          onChanged: (_) => _calculateFromPrice(),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
               TextFormField(
                 controller: _noteController,

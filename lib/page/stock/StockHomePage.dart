@@ -48,6 +48,10 @@ class _StockHomePageState extends State<StockHomePage> {
     for (final s in stocks) {
       summaries[s.id!] = await _db.getStockFifoSummary(s.id!);
     }
+    // 按持仓股数倒序排列（持仓为0的排在最后）
+    stocks.sort((a, b) =>
+        (summaries[b.id!]?['total_shares'] ?? 0)
+            .compareTo(summaries[a.id!]?['total_shares'] ?? 0));
     setState(() {
       _stocks = stocks;
       _summaries = summaries;
@@ -94,6 +98,68 @@ class _StockHomePageState extends State<StockHomePage> {
         createdAt: DateTime.now().toIso8601String(),
       );
       await _db.insertStock(stock);
+      _loadStocks();
+    }
+  }
+
+  Future<void> _editStock(Stock stock) async {
+    final nameController = TextEditingController(text: stock.name);
+    final codeController = TextEditingController(text: stock.code);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑股票'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: '股票名称'),
+            ),
+            TextField(
+              controller: codeController,
+              decoration: const InputDecoration(labelText: '股票代码'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (result == true && nameController.text.isNotEmpty) {
+      stock.name = nameController.text.trim();
+      stock.code = codeController.text.trim();
+      await _db.updateStock(stock);
+      _loadStocks();
+    }
+  }
+
+  Future<void> _deleteStockConfirm(Stock stock) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除确认'),
+        content: Text('确定删除股票「${stock.name}」？该股票下所有交易记录将被删除。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _db.deleteStock(stock.id!);
       _loadStocks();
     }
   }
@@ -198,6 +264,36 @@ class _StockHomePageState extends State<StockHomePage> {
                                 ),
                               );
                               _loadStocks();
+                            },
+                            onLongPress: () {
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (ctx) => SafeArea(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.edit),
+                                        title: const Text('编辑'),
+                                        onTap: () {
+                                          Navigator.pop(ctx);
+                                          _editStock(stock);
+                                        },
+                                      ),
+                                      ListTile(
+                                        leading: const Icon(Icons.delete,
+                                            color: Colors.red),
+                                        title: const Text('删除',
+                                            style: TextStyle(color: Colors.red)),
+                                        onTap: () {
+                                          Navigator.pop(ctx);
+                                          _deleteStockConfirm(stock);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
                             },
                           );
                         },

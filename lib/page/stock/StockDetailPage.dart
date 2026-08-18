@@ -46,26 +46,6 @@ class _StockDetailPageState extends State<StockDetailPage> {
     );
     if (result != null) {
       await _db.insertTransactionTrade(result);
-      if (result.type == '卖出' && mounted) {
-        final doTTrade = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('关联做T'),
-            content: const Text('是否立即关联做T？'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('跳过')),
-              FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('关联')),
-            ],
-          ),
-        );
-        if (doTTrade == true) {
-          await _openTTradeDialog(result);
-        }
-      }
       _loadData();
     }
   }
@@ -90,28 +70,6 @@ class _StockDetailPageState extends State<StockDetailPage> {
     );
     if (result != null) {
       await _db.updateTransactionTrade(result);
-      // 删除旧做T关联后重新关联
-      await _db.deleteTTradesBySellId(t.id!);
-      if (result.type == '卖出' && mounted) {
-        final doTTrade = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('关联做T'),
-            content: const Text('是否重新关联做T？'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('跳过')),
-              FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('关联')),
-            ],
-          ),
-        );
-        if (doTTrade == true) {
-          await _openTTradeDialog(result);
-        }
-      }
       _loadData();
     }
   }
@@ -223,6 +181,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
                         ),
                         subtitle: Text(
                           '费用: ${t.cost.toStringAsFixed(2)}'
+                          '${t.note != null && t.note!.isNotEmpty ? ' | 备注: ${t.note}' : ''}'
                           '$ttLabel',
                           style: ttLabel.isNotEmpty
                               ? TextStyle(

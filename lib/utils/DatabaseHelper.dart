@@ -7,7 +7,7 @@ import 'package:everything_tool/model/AccountItem.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
-  static final int _version = 10;
+  static final int _version = 11;
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
@@ -73,6 +73,7 @@ class DatabaseHelper {
         shares INTEGER NOT NULL,
         commission REAL DEFAULT 0,
         type TEXT NOT NULL,
+        dividend REAL,
         expected_range TEXT,
         expected_buy_low REAL,
         expected_buy_high REAL,
@@ -119,6 +120,9 @@ class DatabaseHelper {
           created_at TEXT NOT NULL
         )
       ''');
+    }
+    if (oldVersion < 11) {
+      await _migrateV10ToV11(db);
     }
   }
 
@@ -211,6 +215,17 @@ class DatabaseHelper {
     }
   }
 
+  Future<void> _migrateV10ToV11(Database db) async {
+    // 检查 dividend 列是否已存在
+    final columns = await db.rawQuery("PRAGMA table_info('t_transaction_trades')");
+    final hasDividend = columns.any((c) => c['name'] == 'dividend');
+    if (!hasDividend) {
+      await db.execute(
+        "ALTER TABLE t_transaction_trades ADD COLUMN dividend REAL"
+      );
+    }
+  }
+
   // ========== Account CRUD ==========
   Future<int> insertAccount(Account account) async {
     final db = await database;
@@ -248,6 +263,12 @@ class DatabaseHelper {
     return await db.delete('t_stocks', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> updateStock(Stock stock) async {
+    final db = await database;
+    return await db.update('t_stocks', stock.toMap(),
+        where: 'id = ?', whereArgs: [stock.id]);
+  }
+
   // ========== TransactionTrade CRUD ==========
   Future<int> insertTransactionTrade(TransactionTrade t) async {
     final db = await database;
@@ -270,7 +291,7 @@ class DatabaseHelper {
     final maps = await db.query('t_transaction_trades',
         where: 'stock_id = ?',
         whereArgs: [stockId],
-        orderBy: 'date ASC');
+        orderBy: 'date DESC');
     return maps.map((m) => TransactionTrade.fromMap(m)).toList();
   }
 
@@ -403,7 +424,7 @@ class DatabaseHelper {
         allTimeShares != 0 ? (allTimeCost / allTimeShares).abs() : 0;
 
     return {
-      'total_shares': currentShares.toDouble(),
+      'total_shares': allTimeShares.toDouble(),
       'total_cost': allTimeCost,
       'avg_cost': avgCost,
       'cycle_cost': currentCycleCost,

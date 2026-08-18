@@ -67,7 +67,8 @@ class TransactionTrade {
   double price;
   int shares; // 正=买入, 负=卖出
   double commission;
-  String type; // "买入" / "卖出"
+  String type; // "买入" / "卖出" / "股息"
+  double? dividend; // 股息金额（仅 type=股息 时使用）
   String? expectedRange;
   double? expectedBuyLow;
   double? expectedBuyHigh;
@@ -84,6 +85,7 @@ class TransactionTrade {
     required this.shares,
     this.commission = 0,
     required this.type,
+    this.dividend,
     this.expectedRange,
     this.expectedBuyLow,
     this.expectedBuyHigh,
@@ -93,8 +95,13 @@ class TransactionTrade {
     required this.createdAt,
   });
 
-  /// 本笔交易费用（买入为负，卖出为正）
-  double get cost => -price * shares - commission;
+  /// 本笔交易费用（买入为负，卖出为正，股息为收入）
+  double get cost {
+    if (type == '股息') {
+      return dividend ?? 0;
+    }
+    return -price * shares - commission;
+  }
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -104,6 +111,7 @@ class TransactionTrade {
         'shares': shares,
         'commission': commission,
         'type': type,
+        'dividend': dividend,
         'expected_range': expectedRange,
         'expected_buy_low': expectedBuyLow,
         'expected_buy_high': expectedBuyHigh,
@@ -121,6 +129,7 @@ class TransactionTrade {
         shares: map['shares'],
         commission: map['commission'] ?? 0,
         type: map['type'],
+        dividend: map['dividend'],
         expectedRange: map['expected_range'],
         expectedBuyLow: map['expected_buy_low'],
         expectedBuyHigh: map['expected_buy_high'],
