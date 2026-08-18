@@ -1,0 +1,24 @@
+{
+  "dart.lineLength": 80,
+  "dart.previewFlutterUiGuides": true,
+  "dart.showInspectorNotifications": false,
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "files.eol": "\n",
+  "files.exclude": {
+    "**/.dart_tool": true,
+    "**/.idea": true,
+    "**/build": true,
+    "**/.git": true
+  },
+  "search.exclude": {
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/windows/flutter/ephemeral": true
+  },
+  "dart.analysisExcludedFolders": [
+    "build"
+  ]
+}
