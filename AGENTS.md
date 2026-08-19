@@ -1,6 +1,6 @@
 # AGENTS.md — Agent 军规
 
-本文件是 Trae / Claude / Cursor 等 Agent 在本仓库工作时的**最高优先级行为准则**。开始任何任务前先通读。
+本文件是 Trae / Claude / Cursor / OpenCode 等 Agent 在本仓库工作时的**最高优先级行为准则**。开始任何任务前先通读。
 
 > 运行时读上下文：本文件会被自动注入到 Agent 上下文中。`CLAUDE.md` 是它的详细版（架构与规范展开）。两者冲突时遵从本文件。
 
@@ -18,35 +18,38 @@
 
 - Flutter / Dart（SDK `^3.9.0`），Material 3。
 - 状态：无状态管理库，使用 `StatefulWidget` + `setState`。
-- 存储：密码用 `SharedPreferences`（JSON）；股票用 SQLite（`sqflite` + Windows FFI）。
+- 存储：密码股票用 SQLite（`sqflite` + Windows FFI），坚果云上传配置使用`SharedPreferences`。
 - 通讯：`http`（坚果云 WebDAV）。
 
 ## 目录速览（改代码前先定位）
 
 ```
 lib/
-  main.dart                      # 入口，FFI 初始化
+  main.dart                         # 入口，FFI 初始化
   model/
-    AccountItem.dart             # 密码账号模型
-    StockModels.dart             # 股票：Account/Stock/TransactionTrade/TTrade
+    AccountItem.dart                # 密码账号模型
+    StockModels.dart                # 股票：Account/Stock/TransactionTrade/TTrade
   page/
-    HomePage.dart                # 首页，工具卡片注册表（新增工具改这里）
-    AccountListPage.dart         # 密码列表
-    SettingsPage.dart            # WebDAV 配置
-    stock/
-      StockHomePage.dart         # 股票首页（账户维度汇总）
-      StockDetailPage.dart       # 个股详情 + 收益汇总
-      ProfitSummaryPage.dart     # 多维收益视图
-      AccountManagePage.dart     # 账户管理
-      StockTransactionDialog.dart# 买卖记录弹窗
-      TTradeDialog.dart          # 做T关联弹窗
+    HomePage.dart                   # 首页，工具卡片注册表（新增工具改这里）
+    AccountListPage.dart            # 密码列表
+    SettingsPage.dart               # WebDAV 配置
+    password/                       # 密码管理模块
+      AccountListPage.dart          # 密码管理首页，展示分类和列表数据
+      AccountListItem.dart          # 密码列表页的显示组件
+      AccountDialog.dart            # 增加密码记录时的弹窗
+      PasswordGeneratorDialog.dart  # 密码生成器
+    stock/                          # 股票交易记录模块
+      StockHomePage.dart            # 股票首页（账户维度汇总）
+      StockDetailPage.dart          # 个股详情 + 收益汇总
+      ProfitSummaryPage.dart        # 多维收益视图
+      AccountManagePage.dart        # 账户管理
+      StockTransactionDialog.dart   # 买卖记录弹窗
+      TTradeDialog.dart             # 做T关联弹窗
   utils/
-    DatabaseHelper.dart          # SQLite 单例，全部 CRUD + 统计 + 迁移
-    AppConfig.dart               # SharedPreferences 配置（WebDAV/设备ID）
-    SyncService.dart             # 上传/下载数据库到坚果云
-    WebDavService.dart           # WebDAV 底层
-  widgets/
-    AccountDialog.dart, AccountListItem.dart
+    DatabaseHelper.dart             # SQLite 单例，全部 CRUD + 统计 + 迁移
+    AppConfig.dart                  # SharedPreferences 配置（WebDAV/设备ID）
+    SyncService.dart                # 上传/下载数据库到坚果云
+    WebDavService.dart              # WebDAV 底层
 ```
 
 ## 架构与数据流（必须理解）

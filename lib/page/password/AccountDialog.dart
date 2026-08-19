@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:everything_tool/model/AccountItem.dart';
-import 'package:everything_tool/widgets/PasswordGeneratorDialog.dart';
+import 'package:everything_tool/page/password/PasswordGeneratorDialog.dart';
 
 class AccountDialog extends StatefulWidget {
   final AccountItem? existingItem;

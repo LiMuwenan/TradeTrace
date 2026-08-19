@@ -6,8 +6,8 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:everything_tool/model/AccountItem.dart';
-import 'package:everything_tool/widgets/AccountDialog.dart';
-import 'package:everything_tool/widgets/AccountListItem.dart';
+import 'package:everything_tool/page/password/AccountDialog.dart';
+import 'package:everything_tool/page/password/AccountListItem.dart';
 import 'package:everything_tool/utils/DatabaseHelper.dart';
 
 class AccountListPage extends StatefulWidget {
