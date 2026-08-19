@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'package:everything_tool/model/AccountItem.dart';
+import 'package:everything_tool/widgets/PasswordGeneratorDialog.dart';
 
 class AccountDialog extends StatefulWidget {
   final AccountItem? existingItem;
-  final Function(String, String, String) onSave;
+  final Function(String, String, String, String?) onSave;
 
   const AccountDialog({
+    super.key,
     this.existingItem,
     required this.onSave,
   });
@@ -20,6 +22,7 @@ class _AccountDialogState extends State<AccountDialog> {
   late TextEditingController _appNameController;
   late TextEditingController _usernameController;
   late TextEditingController _passwordController;
+  late String? _selectedTag;
 
   @override
   void initState() {
@@ -27,6 +30,7 @@ class _AccountDialogState extends State<AccountDialog> {
     _appNameController = TextEditingController(text: widget.existingItem?.appName ?? '');
     _usernameController = TextEditingController(text: widget.existingItem?.username ?? '');
     _passwordController = TextEditingController(text: widget.existingItem?.password ?? '');
+    _selectedTag = widget.existingItem?.tag;
   }
 
   @override
@@ -79,6 +83,19 @@ class _AccountDialogState extends State<AccountDialog> {
                 decoration: InputDecoration(
                   labelText: '密码',
                   border: OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.casino),
+                    tooltip: '生成随机密码',
+                    onPressed: () async {
+                      final generated = await showDialog<String>(
+                        context: context,
+                        builder: (ctx) => const PasswordGeneratorDialog(),
+                      );
+                      if (generated != null) {
+                        _passwordController.text = generated;
+                      }
+                    },
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -87,6 +104,25 @@ class _AccountDialogState extends State<AccountDialog> {
                   return null;
                 },
                 obscureText: true,
+              ),
+              SizedBox(height: 16),
+              DropdownButtonFormField<String?>(
+                initialValue: _selectedTag,
+                decoration: const InputDecoration(
+                  labelText: '标签',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('未分类'),
+                  ),
+                  ...AccountItem.presetTags.map((tag) => DropdownMenuItem<String?>(
+                        value: tag,
+                        child: Text(tag),
+                      )),
+                ],
+                onChanged: (v) => setState(() => _selectedTag = v),
               ),
               SizedBox(height: 24),
               Row(
@@ -104,6 +140,7 @@ class _AccountDialogState extends State<AccountDialog> {
                           _appNameController.text,
                           _usernameController.text,
                           _passwordController.text,
+                          _selectedTag,
                         );
                         Navigator.of(context).pop();
                       }

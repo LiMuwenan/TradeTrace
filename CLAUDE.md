@@ -25,7 +25,7 @@
 **t_password_account**（密码管理模块的单条密码记录）
 ```
 id TEXT PRIMARY KEY,app_name TEXT NOT NULL,username TEXT NOT NULL,
-password TEXT NOT NULL,created_at TEXT NOT NULL
+password TEXT NOT NULL,created_at TEXT NOT NULL,tag TEXT
 ```
 
 **t_accounts**（证券账户）

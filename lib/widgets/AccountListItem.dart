@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import 'package:everything_tool/model/AccountItem.dart';
@@ -21,6 +22,13 @@ class AccountListItem extends StatefulWidget {
 class _AccountListItemState extends State<AccountListItem> {
   bool _isExpanded = false;
   bool _showPassword = false;
+
+  void _copy(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已复制$label')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +80,25 @@ class _AccountListItemState extends State<AccountListItem> {
                 // 账号信息
                 _buildDetailRow('应用名称', widget.account.appName),
                 SizedBox(height: 12),
-                _buildDetailRow('用户名', widget.account.username),
+                Row(
+                  children: [
+                    Text(
+                      '用户名: ',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(widget.account.username),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, color: Colors.blue),
+                      tooltip: '复制用户名',
+                      onPressed: () => _copy(widget.account.username, '用户名'),
+                    ),
+                  ],
+                ),
                 SizedBox(height: 12),
                 // 密码信息
                 Row(
@@ -101,8 +127,17 @@ class _AccountListItemState extends State<AccountListItem> {
                         });
                       },
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, color: Colors.blue),
+                      tooltip: '复制密码',
+                      onPressed: () => _copy(widget.account.password, '密码'),
+                    ),
                   ],
                 ),
+                if (widget.account.tag != null) ...[
+                  SizedBox(height: 12),
+                  _buildDetailRow('标签', widget.account.tag!),
+                ],
                 SizedBox(height: 12),
                 _buildDetailRow(
                     '创建日期',

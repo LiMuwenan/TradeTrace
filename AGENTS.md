@@ -42,7 +42,6 @@ lib/
       TTradeDialog.dart          # 做T关联弹窗
   utils/
     DatabaseHelper.dart          # SQLite 单例，全部 CRUD + 统计 + 迁移
-    SharedPreferencesHelper.dart # 密码存取
     AppConfig.dart               # SharedPreferences 配置（WebDAV/设备ID）
     SyncService.dart             # 上传/下载数据库到坚果云
     WebDavService.dart           # WebDAV 底层
@@ -54,6 +53,7 @@ lib/
 
 - **密码工具**：SQLite 单库 `stock_trading.db`，由 `DatabaseHelper` 单例管理。
   - 表： `t_password_account`
+  - 完整 schema 见 `CLAUDE.md` 或 `DatabaseHelper._onCreate`。
 - **股票工具**：SQLite 单库 `stock_trading.db`，由 `DatabaseHelper` 单例管理。
   - 表：`t_accounts` → `t_stocks` → `t_transaction_trades`，以及关联表 `t_trades`（做T）。
   - 完整 schema 见 `CLAUDE.md` 或 `DatabaseHelper._onCreate`。

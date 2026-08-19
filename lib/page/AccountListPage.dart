@@ -19,6 +19,7 @@ class _AccountListPageState extends State<AccountListPage> {
   List<AccountItem> accounts = [];
   List<AccountItem> filteredAccounts = [];
   TextEditingController searchController = TextEditingController();
+  String? selectedTag;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   @override
@@ -42,10 +43,27 @@ class _AccountListPageState extends State<AccountListPage> {
     final query = searchController.text.toLowerCase();
     setState(() {
       filteredAccounts = accounts.where((account) {
-        return account.appName.toLowerCase().contains(query) ||
+        final matchesQuery = account.appName.toLowerCase().contains(query) ||
             account.username.toLowerCase().contains(query);
+        final matchesTag = selectedTag == null || account.tag == selectedTag;
+        return matchesQuery && matchesTag;
       }).toList();
     });
+  }
+
+  Widget _buildTagChip(String? tag, String label) {
+    final selected = selectedTag == tag;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) {
+          setState(() => selectedTag = tag);
+          _filterAccounts();
+        },
+      ),
+    );
   }
 
   void _addOrEditAccount({AccountItem? existingItem}) {
@@ -58,12 +76,13 @@ class _AccountListPageState extends State<AccountListPage> {
 
         return AccountDialog(
           existingItem: existingItem,
-          onSave: (newAppName, newUsername, newPassword) async {
+          onSave: (newAppName, newUsername, newPassword, newTag) async {
             if (existingItem != null) {
               // 编辑现有项
               existingItem.appName = newAppName;
               existingItem.username = newUsername;
               existingItem.password = newPassword;
+              existingItem.tag = newTag;
               await _dbHelper.saveAllAccountItems(accounts);
             } else {
               // 添加新项
@@ -71,6 +90,7 @@ class _AccountListPageState extends State<AccountListPage> {
                 appName: newAppName,
                 username: newUsername,
                 password: newPassword,
+                tag: newTag,
               );
               accounts.add(newAccount);
               await _dbHelper.saveAllAccountItems(accounts);
@@ -280,6 +300,21 @@ class _AccountListPageState extends State<AccountListPage> {
                   contentPadding: EdgeInsets.symmetric(horizontal: 16),
                   prefixIcon: Icon(Icons.search, color: Colors.grey),
                 ),
+              ),
+            ),
+          ),
+          // 标签筛选
+          Container(
+            color: Colors.grey[100],
+            height: 48,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(
+                children: [
+                  _buildTagChip(null, '全部'),
+                  ...AccountItem.presetTags.map((tag) => _buildTagChip(tag, tag)),
+                ],
               ),
             ),
           ),

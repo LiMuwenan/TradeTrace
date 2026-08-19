@@ -7,7 +7,7 @@ import 'package:everything_tool/model/AccountItem.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
-  static final int _version = 11;
+  static final int _version = 12;
   factory DatabaseHelper() => _instance;
   DatabaseHelper._internal();
 
@@ -101,6 +101,7 @@ class DatabaseHelper {
         app_name TEXT NOT NULL,
         username TEXT NOT NULL,
         password TEXT NOT NULL,
+        tag TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -123,6 +124,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 11) {
       await _migrateV10ToV11(db);
+    }
+    if (oldVersion < 12) {
+      await _migrateV11ToV12(db);
     }
   }
 
@@ -223,6 +227,16 @@ class DatabaseHelper {
       await db.execute(
         "ALTER TABLE t_transaction_trades ADD COLUMN dividend REAL"
       );
+    }
+  }
+
+  Future<void> _migrateV11ToV12(Database db) async {
+    // 检查 t_password_account 的 tag 列是否已存在
+    final columns =
+        await db.rawQuery("PRAGMA table_info('t_password_account')");
+    final hasTag = columns.any((c) => c['name'] == 'tag');
+    if (!hasTag) {
+      await db.execute("ALTER TABLE t_password_account ADD COLUMN tag TEXT");
     }
   }
 
@@ -498,6 +512,7 @@ class DatabaseHelper {
       'app_name': item.appName,
       'username': item.username,
       'password': item.password,
+      'tag': item.tag,
       'created_at': item.createdAt.toIso8601String(),
     });
   }
@@ -510,6 +525,7 @@ class DatabaseHelper {
         'app_name': item.appName,
         'username': item.username,
         'password': item.password,
+        'tag': item.tag,
         'created_at': item.createdAt.toIso8601String(),
       },
       where: 'id = ?',
@@ -530,6 +546,7 @@ class DatabaseHelper {
       'appName': m['app_name'],
       'username': m['username'],
       'password': m['password'],
+      'tag': m['tag'],
       'createdAt': m['created_at'],
     })).toList();
   }
@@ -544,6 +561,7 @@ class DatabaseHelper {
           'app_name': item.appName,
           'username': item.username,
           'password': item.password,
+          'tag': item.tag,
           'created_at': item.createdAt.toIso8601String(),
         });
       }
