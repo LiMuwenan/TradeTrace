@@ -62,6 +62,72 @@ class _StockDetailPageState extends State<StockDetailPage> {
     }
   }
 
+  Future<void> _deleteTTrades(TransactionTrade sellTxn) async {
+    final tTrades = await _db.getTTradesBySellId(sellTxn.id!);
+    if (tTrades.isEmpty) return;
+
+    final deleteId = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除做T关联'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: tTrades.map((tt) {
+              return FutureBuilder<double>(
+                future: _db.getTTradeProfit(tt['id']),
+                builder: (context, snapshot) {
+                  final profit = snapshot.data ?? 0;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '${(tt['buy_date'] as String).substring(5)} 买入 '
+                      '\u2192 ${(tt['sell_date'] as String).substring(5)} 卖出',
+                    ),
+                    subtitle: Text('T${tt['shares']}股 '
+                        '收益: ${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(2)}'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => Navigator.pop(ctx, tt['id']),
+                    ),
+                  );
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消')),
+        ],
+      ),
+    );
+
+    if (deleteId != null) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('删除确认'),
+          content: const Text('确定删除这笔做T关联？'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('删除')),
+          ],
+        ),
+      );
+      if (confirm == true) {
+        await _db.deleteTTrade(deleteId);
+        _loadData();
+      }
+    }
+  }
+
   Future<void> _editTransaction(TransactionTrade t) async {
     final result = await showDialog<TransactionTrade>(
       context: context,
@@ -229,6 +295,18 @@ class _StockDetailPageState extends State<StockDetailPage> {
                                       onTap: () {
                                         Navigator.pop(ctx);
                                         _openTTradeDialog(t);
+                                      },
+                                    ),
+                                  if (t.type == '卖出' &&
+                                      _getTTradeLabel(t).isNotEmpty)
+                                    ListTile(
+                                      leading: const Icon(Icons.link_off,
+                                          color: Colors.red),
+                                      title: const Text('删除做T关联',
+                                          style: TextStyle(color: Colors.red)),
+                                      onTap: () {
+                                        Navigator.pop(ctx);
+                                        _deleteTTrades(t);
                                       },
                                     ),
                                   ListTile(

@@ -356,6 +356,22 @@ class DatabaseHelper {
     return result;
   }
 
+  /// 获取某笔卖出关联的所有做T记录详情
+  Future<List<Map<String, dynamic>>> getTTradesBySellId(int sellId) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT tt.*, 
+        b.price as buy_price, b.shares as buy_shares, b.commission as buy_commission, b.date as buy_date,
+        s.price as sell_price, s.shares as sell_shares, s.commission as sell_commission, s.date as sell_date
+      FROM t_trades tt
+      JOIN t_transaction_trades b ON tt.buy_transaction_id = b.id
+      JOIN t_transaction_trades s ON tt.sell_transaction_id = s.id
+      WHERE s.id = ?
+      ORDER BY tt.created_at ASC
+    ''', [sellId]);
+    return result;
+  }
+
   /// 删除某笔卖出关联的所有做T记录
   Future<void> deleteTTradesBySellId(int sellId) async {
     final db = await database;
