@@ -255,6 +255,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
                         subtitle: Text(
                           '费用: ${t.cost.toStringAsFixed(2)}'
                           '${t.note != null && t.note!.isNotEmpty ? ' | 备注: ${t.note}' : ''}'
+                          '${t.commission > 0 ? ' | 手续费: +${t.commission.toStringAsFixed(2)}' : ''}'
                           '$ttLabel',
                           style: ttLabel.isNotEmpty
                               ? TextStyle(
