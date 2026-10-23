@@ -316,6 +316,8 @@ export function Field({
   autoFocus = false,
   error,
   maxLength,
+  secure = false,
+  autoCapitalize = 'sentences',
 }: {
   label: string
   value: string
@@ -325,6 +327,8 @@ export function Field({
   autoFocus?: boolean
   error?: string
   maxLength?: number
+  secure?: boolean
+  autoCapitalize?: 'none' | 'sentences'
 }) {
   return (
     <View style={styles.field}>
@@ -337,6 +341,8 @@ export function Field({
         keyboardType={keyboardType === 'decimal-pad' ? 'decimal-pad' : keyboardType}
         autoFocus={autoFocus}
         maxLength={maxLength}
+        secureTextEntry={secure}
+        autoCapitalize={autoCapitalize}
         style={[styles.input, !!error && styles.inputError]}
       />
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}

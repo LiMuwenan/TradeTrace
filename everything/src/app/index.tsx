@@ -59,6 +59,12 @@ export default function HomeScreen() {
             small
             onPress={() => router.push('/summary')}
           />
+          <Button
+            label="设置"
+            variant="ghost"
+            small
+            onPress={() => router.push('/settings')}
+          />
         </View>
       </View>
 
@@ -141,7 +147,7 @@ export default function HomeScreen() {
       )}
 
       <Text style={styles.footerNote}>
-        数据保存在本机设备，尚未连接 lianghua 后端。
+        数据保存在本机，可通过「设置」使用坚果云 WebDAV 同步；尚未连接 lianghua 后端。
       </Text>
 
       <Sheet

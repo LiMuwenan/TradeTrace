@@ -19,6 +19,8 @@ interface TradeActions {
   createTTrade: (input: Pick<TTrade, 'buyTransactionId' | 'sellTransactionId' | 'shares'>) => void
   removeTTrade: (ttradeId: number) => void
   removeTTradesBySell: (sellId: number) => void
+  /** 用云端数据整体替换本机数据（坚果云同步下载） */
+  replaceState: (next: TradeState) => void
 }
 
 interface TradeContextValue {
@@ -77,6 +79,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
         commit((s) => mutations.addTTrade(s, { ...input, createdAt: nowIso() })),
       removeTTrade: (ttradeId) => commit((s) => mutations.deleteTTrade(s, ttradeId)),
       removeTTradesBySell: (sellId) => commit((s) => mutations.deleteTTradesBySell(s, sellId)),
+      replaceState: (next) => commit(() => mutations.normalizeState(next)),
     }),
     [commit],
   )

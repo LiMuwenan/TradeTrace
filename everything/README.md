@@ -38,6 +38,7 @@ npm run export:web # 导出静态站点到 dist/
 - 股票交易流水：买入、卖出、股息；编辑、删除；预期价格区间按比例自动换算
 - 做T关联：卖出记录关联买入份额，按份额比例分摊手续费计算收益
 - 收益统计：按账户 / 按个股 / 合并账户 / 按做T 四个维度
+- 坚果云 WebDAV 同步：上传本机数据到云端、按「远程设备 ID」下载覆盖本机
 
 统计口径与旧版 Flutter 应用保持一致，见 `src/data/stats.ts`。
 
@@ -50,6 +51,7 @@ src/
     index.tsx               # 账户总览
     accounts.tsx            # 账户管理
     summary.tsx             # 收益统计
+    settings.tsx            # 应用设置（坚果云 WebDAV 同步）
     account/[id].tsx        # 账户详情（股票列表）
     stock/[id].tsx          # 个股详情（交易流水 / 做T）
   components/
@@ -60,8 +62,12 @@ src/
     state.ts                # 纯函数状态变换（增删改 + 级联）
     stats.ts                # 汇总与收益统计
     storage.ts              # 本地持久化（唯一需要替换的后端接入点）
+    sync-config.ts          # 坚果云同步配置（设备 ID / 账号 / 应用密码）
+    webdav.ts               # WebDAV PUT / GET / MKCOL 客户端
+    sync.ts                 # 同步文件序列化与上传下载
     trade-context.tsx       # Provider + actions
     stats.test.ts           # 领域逻辑测试
+    sync.test.ts            # 同步配置 / WebDAV 编码 / 同步文件测试
   theme/tokens.ts           # 颜色、间距、字号
   utils/format.ts           # 数字 / 日期格式化
 ```
@@ -74,7 +80,17 @@ src/
 2. 领域模型（`types.ts`）直接作为 API DTO 的基础，页面与统计逻辑不需要改动。
 3. lianghua 后端改动在独立分支进行，本仓库暂不触碰 `lianghua/`。
 
+## 坚果云同步
+
+在与 lianghua 后端对接之前，用坚果云 WebDAV 替代云同步（逻辑沿用旧 Flutter 版本，文件改为 JSON）：
+
+- 云端路径：`TradeTrace/{上传方设备ID}/tradetrace.json`
+- 上传：把当前全部账户、股票、交易、做T关联写入云端
+- 下载：读取「远程设备 ID」对应目录的文件，校验格式后整体替换本机数据
+- 配置（含应用密码）仅保存在本机 AsyncStorage，不随同步文件上传
+- Web 端受浏览器跨域（CORS）限制，坚果云 WebDAV 通常无法直连；Android 端正常
+
 ## 说明
 
-- 应用已移除旧版 Flutter 工程中的「密码管理」与「坚果云 WebDAV 同步」。
+- 应用已移除旧版 Flutter 工程中的「密码管理」；坚果云同步保留并改写为 RN 实现。
 - 既有 Flutter 数据（`stock_trading.db`）不迁移，新系统从零开始。
