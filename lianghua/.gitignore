@@ -1,0 +1,17 @@
+.idea/**
+
+*.zip
+*.xlsx
+*.xls
+*.csv
+
+# 前端构建产物
+node_modules/
+web/dist/
+
+# 平台运行产物
+outputs/**
+data/**
+__pycache__/
+*.pyc
+*.log

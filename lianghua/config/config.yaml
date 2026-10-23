@@ -1,0 +1,70 @@
+# 量化交易平台 平台配置
+# =============================================================
+# 数据库路径（SQLite，相对仓库根目录）
+database: data/meta.db
+
+# 结果输出目录（相对仓库根目录），task 日志写入 {output}/logs/
+output_dir: outputs
+
+# 平台主数据（Parquet 按股票分文件）存储目录，相对仓库根目录
+#   内建「获取数据」摄取写库、文件扫描、数据集声明均对齐该位置
+data_dir: F:\market
+
+# 原始层目录（审计/可重建）：每日股票数据（日K日分组）与因子数据（复权因子每日）
+#   与遗留脚本同格式的按日 CSV；仅作附加留存，不参与数据集扫描与断点统计
+daily_dir: "G:\\各种资料\\量化数据\\A股日K日分组"
+factor_dir: "G:\\各种资料\\量化数据\\复权因子每日"
+
+# 指数 Parquet 目录（独立分文件夹，与个股 data_dir 分开；指数无复权/估值）
+index_dir: data/market/index_daily
+
+# 每日大盘汇总邮件：触发 cron / 收件人 / 指数清单
+report:
+  enabled: true
+  cron: "0 18 * * 1-5"
+  recipients:
+    - "your_account@outlook.com"
+  subject_prefix: "A股每日大盘汇总"
+  index_codes:
+    - sh.000001
+    - sz.399001
+    - sz.399006
+    - sh.000688
+    - sh.000016
+    - sh.000300
+    - sh.000905
+    - sh.000852
+
+# SMTP 发件（发件用 126 邮箱；授权码走环境变量 SMTP_PASSWORD，勿写入本文件）
+smtp:
+  host: smtp.126.com
+  port: 465
+  use_ssl: true
+  username: "your_sender@126.com"
+  from_addr: "your_sender@126.com"
+  password_env: SMTP_PASSWORD
+
+# CORS 白名单（仅放行本机来源；含 Vite dev 端口 5173）
+cors_origins:
+  - http://127.0.0.1:8000
+  - http://localhost:8000
+  - http://127.0.0.1:5173
+  - http://localhost:5173
+
+# manifest 扫描目录（相对仓库根目录），*.py.manifest.yaml
+scan_dirs:
+  - script
+  - strategy/strategy
+  - strategy/backtest
+
+# 数据集定义：扫描实际文件得到最新日期/滞后天数，不作为操控值
+#   dir   : 相对仓库根目录的真实数据目录
+#   type  : 数据类型标识
+datasets:
+  - name: 平台日K数据
+    type: 日K
+    dir: F:\market
+    file_glob: "*.parquet"
+
+# 子进程默认超时（秒），单个任务超时后 kill
+task_timeout_sec: 7200
