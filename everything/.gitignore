@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# OCR 识别素材（体积大，不入库）
+assets/ocr/
