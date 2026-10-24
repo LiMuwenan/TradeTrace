@@ -102,7 +102,8 @@ export default function SummaryScreen() {
             {formatNumber(Math.abs(total), 2)}
           </Text>
           <Text style={styles.mergedMeta}>
-            {accounts.length} 个账户 · {stocks.length} 只股票 · {state.transactions.length} 笔交易
+            {accounts.length} 个账户 · {stocks.length} 只股票 ·{' '}
+            {state.transactions.filter((trade) => !trade.deletedAt).length} 笔交易
           </Text>
         </Card>
       ) : null}

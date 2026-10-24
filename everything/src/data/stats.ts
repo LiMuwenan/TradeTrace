@@ -27,9 +27,28 @@ export interface TTradeDetail {
   profit: number
 }
 
-/** 按日期、id 升序（与旧版 SQLite 的 date ASC 口径一致） */
+/** 迁移后的 v1 交易没有 legacyId 时排在最后，保持“旧数据在前”的阅读顺序 */
+function legacyRank(trade: TransactionTrade): number {
+  return trade.legacyId ?? Number.MAX_SAFE_INTEGER
+}
+
+/**
+ * 按日期升序；同日期优先按 v1 旧 ID，再按创建时间与 UUID。
+ * 这样迁移前后同一份数据的建仓顺序完全一致，六项指标不会回归。
+ */
 export function sortTransactionsAsc(trades: TransactionTrade[]): TransactionTrade[] {
-  return [...trades].sort((a, b) => (a.date === b.date ? a.id - b.id : a.date.localeCompare(b.date)))
+  return [...trades].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date)
+    const rank = legacyRank(a) - legacyRank(b)
+    if (rank !== 0) return rank
+    if (a.createdAt !== b.createdAt) return a.createdAt.localeCompare(b.createdAt)
+    return a.id.localeCompare(b.id)
+  })
+}
+
+/** 个股流水倒序展示：最新交易在最上面 */
+export function sortTransactionsDesc(trades: TransactionTrade[]): TransactionTrade[] {
+  return sortTransactionsAsc(trades).reverse()
 }
 
 /** 简单汇总：SUM(shares) 与 SUM(-price*shares-commission) */
@@ -91,23 +110,42 @@ export function stockCycleSummary(trades: TransactionTrade[]): CycleSummary {
   }
 }
 
-export function stockTransactions(state: TradeState, stockId: number): TransactionTrade[] {
-  return state.transactions.filter((t) => t.stockId === stockId)
+export function stockTransactions(state: TradeState, stockId: string): TransactionTrade[] {
+  return state.transactions.filter((trade) => trade.stockId === stockId && !trade.deletedAt)
 }
 
-export function stockProfit(state: TradeState, stockId: number): number {
+export function stockProfit(state: TradeState, stockId: string): number {
   return stockSummary(stockTransactions(state, stockId)).totalCost
 }
 
-export function accountProfit(state: TradeState, accountId: number): number {
-  const stockIds = new Set(state.stocks.filter((s) => s.accountId === accountId).map((s) => s.id))
+export function accountProfit(state: TradeState, accountId: string): number {
+  const stockIds = new Set(
+    state.stocks
+      .filter((stock) => stock.accountId === accountId && !stock.deletedAt)
+      .map((stock) => stock.id),
+  )
   return state.transactions
-    .filter((t) => stockIds.has(t.stockId))
-    .reduce((sum, t) => sum + transactionCost(t), 0)
+    .filter((trade) => stockIds.has(trade.stockId) && !trade.deletedAt)
+    .reduce((sum, trade) => sum + transactionCost(trade), 0)
 }
 
+/**
+ * 合并账户总收益：只统计「账户与股票都未删除」的交易。
+ * 合并同步后可能出现账户已删、但本机新增了该账户下股票的情况，
+ * 若不校验父链，这里会与 accountProfit 算出两套口径。
+ */
 export function mergedProfit(state: TradeState): number {
-  return state.transactions.reduce((sum, t) => sum + transactionCost(t), 0)
+  const accountIds = new Set(
+    state.accounts.filter((account) => !account.deletedAt).map((account) => account.id),
+  )
+  const stockIds = new Set(
+    state.stocks
+      .filter((stock) => !stock.deletedAt && accountIds.has(stock.accountId))
+      .map((stock) => stock.id),
+  )
+  return state.transactions
+    .filter((trade) => !trade.deletedAt && stockIds.has(trade.stockId))
+    .reduce((sum, trade) => sum + transactionCost(trade), 0)
 }
 
 /** 做T单笔收益：买卖手续费按份额比例分摊 */
@@ -119,9 +157,12 @@ export function tTradeProfit(ttrade: TTrade, buy: TransactionTrade, sell: Transa
   return (sell.price - buy.price) * ttrade.shares - buyCommission - sellCommission
 }
 
-export function tTradeDetails(state: TradeState, stockId: number): TTradeDetail[] {
-  const byId = new Map(state.transactions.map((t) => [t.id, t]))
+export function tTradeDetails(state: TradeState, stockId: string): TTradeDetail[] {
+  const byId = new Map(
+    state.transactions.filter((trade) => !trade.deletedAt).map((trade) => [trade.id, trade]),
+  )
   return state.tTrades
+    .filter((ttrade) => !ttrade.deletedAt)
     .map((ttrade) => {
       const buy = byId.get(ttrade.buyTransactionId)
       const sell = byId.get(ttrade.sellTransactionId)
@@ -133,15 +174,17 @@ export function tTradeDetails(state: TradeState, stockId: number): TTradeDetail[
 }
 
 /** 卖出记录关联的做T列表 */
-export function tTradesBySell(state: TradeState, sellId: number): TTradeDetail[] {
-  const byId = new Map(state.transactions.map((t) => [t.id, t]))
+export function tTradesBySell(state: TradeState, sellId: string): TTradeDetail[] {
+  const byId = new Map(
+    state.transactions.filter((trade) => !trade.deletedAt).map((trade) => [trade.id, trade]),
+  )
   return state.tTrades
-    .filter((tt) => tt.sellTransactionId === sellId)
-    .map((tt) => {
-      const buy = byId.get(tt.buyTransactionId)
-      const sell = byId.get(tt.sellTransactionId)
+    .filter((ttrade) => ttrade.sellTransactionId === sellId && !ttrade.deletedAt)
+    .map((ttrade) => {
+      const buy = byId.get(ttrade.buyTransactionId)
+      const sell = byId.get(ttrade.sellTransactionId)
       if (!buy || !sell) return null
-      return { ttrade: tt, buy, sell, profit: tTradeProfit(tt, buy, sell) }
+      return { ttrade, buy, sell, profit: tTradeProfit(ttrade, buy, sell) }
     })
     .filter((row): row is TTradeDetail => row !== null)
 }
@@ -149,21 +192,28 @@ export function tTradesBySell(state: TradeState, sellId: number): TTradeDetail[]
 /** 可关联的买入记录：买入股数 > 已被做T占用的股数（不含当前这笔卖出） */
 export function availableBuys(
   state: TradeState,
-  stockId: number,
-  excludeSellId?: number,
+  stockId: string,
+  excludeSellId?: string,
 ): TransactionTrade[] {
   return sortTransactionsAsc(
-    state.transactions.filter((t) => t.stockId === stockId && t.type === '买入'),
+    state.transactions.filter(
+      (trade) => trade.stockId === stockId && trade.type === '买入' && !trade.deletedAt,
+    ),
   ).filter((buy) => {
     const linked = state.tTrades
-      .filter((tt) => tt.buyTransactionId === buy.id && tt.sellTransactionId !== excludeSellId)
-      .reduce((sum, tt) => sum + tt.shares, 0)
+      .filter(
+        (ttrade) =>
+          ttrade.buyTransactionId === buy.id &&
+          ttrade.sellTransactionId !== excludeSellId &&
+          !ttrade.deletedAt,
+      )
+      .reduce((sum, ttrade) => sum + ttrade.shares, 0)
     return buy.shares > linked
   })
 }
 
 export interface AccountRow {
-  accountId: number
+  accountId: string
   name: string
   stockCount: number
   holdingCount: number
@@ -171,43 +221,49 @@ export interface AccountRow {
 }
 
 export function accountRows(state: TradeState): AccountRow[] {
-  return state.accounts.map((account) => {
-    const stocks = state.stocks.filter((s) => s.accountId === account.id)
-    const holdingCount = stocks.filter(
-      (s) => stockCycleSummary(stockTransactions(state, s.id)).totalShares > 0,
-    ).length
-    return {
-      accountId: account.id,
-      name: account.name,
-      stockCount: stocks.length,
-      holdingCount,
-      profit: accountProfit(state, account.id),
-    }
-  })
+  return state.accounts
+    .filter((account) => !account.deletedAt)
+    .map((account) => {
+      const stocks = state.stocks.filter(
+        (stock) => stock.accountId === account.id && !stock.deletedAt,
+      )
+      const holdingCount = stocks.filter(
+        (stock) => stockCycleSummary(stockTransactions(state, stock.id)).totalShares > 0,
+      ).length
+      return {
+        accountId: account.id,
+        name: account.name,
+        stockCount: stocks.length,
+        holdingCount,
+        profit: accountProfit(state, account.id),
+      }
+    })
 }
 
 export interface StockProfitRow {
-  stockId: number
+  stockId: string
   accountName: string
   label: string
   profit: number
 }
 
 export function stockProfitRows(state: TradeState): StockProfitRow[] {
-  return state.accounts.flatMap((account) =>
-    state.stocks
-      .filter((s) => s.accountId === account.id)
-      .map((stock) => ({
-        stockId: stock.id,
-        accountName: account.name,
-        label: `${stock.name}${stock.code}`,
-        profit: stockProfit(state, stock.id),
-      })),
-  )
+  return state.accounts
+    .filter((account) => !account.deletedAt)
+    .flatMap((account) =>
+      state.stocks
+        .filter((stock) => stock.accountId === account.id && !stock.deletedAt)
+        .map((stock) => ({
+          stockId: stock.id,
+          accountName: account.name,
+          label: `${stock.name}${stock.code}`,
+          profit: stockProfit(state, stock.id),
+        })),
+    )
 }
 
 export interface TTradeProfitRow {
-  id: number
+  id: string
   stockLabel: string
   buyDate: string
   sellDate: string
@@ -216,14 +272,16 @@ export interface TTradeProfitRow {
 }
 
 export function allTTradeRows(state: TradeState): TTradeProfitRow[] {
-  return state.stocks.flatMap((stock) =>
-    tTradeDetails(state, stock.id).map((row) => ({
-      id: row.ttrade.id,
-      stockLabel: `${stock.name}${stock.code}`,
-      buyDate: row.buy.date,
-      sellDate: row.sell.date,
-      shares: row.ttrade.shares,
-      profit: row.profit,
-    })),
-  )
+  return state.stocks
+    .filter((stock) => !stock.deletedAt)
+    .flatMap((stock) =>
+      tTradeDetails(state, stock.id).map((row) => ({
+        id: row.ttrade.id,
+        stockLabel: `${stock.name}${stock.code}`,
+        buyDate: row.buy.date,
+        sellDate: row.sell.date,
+        shares: row.ttrade.shares,
+        profit: row.profit,
+      })),
+    )
 }

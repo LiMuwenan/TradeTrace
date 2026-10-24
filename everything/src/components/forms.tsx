@@ -30,7 +30,7 @@ export function TransactionForm({
   onClose,
 }: {
   visible: boolean
-  stockId: number
+  stockId: string
   editing: TransactionTrade | null
   onClose: () => void
 }) {
@@ -123,8 +123,9 @@ export function TransactionForm({
 
     if (isDividend) {
       parsedDividend = parseNumber(dividend) ?? NaN
-      if (!Number.isFinite(parsedDividend) || parsedDividend <= 0) {
-        nextErrors.dividend = '请输入大于 0 的股息金额'
+      // 股息允许负数（红利税/调整），导入的历史记录编辑时必须能原样保存
+      if (!Number.isFinite(parsedDividend) || parsedDividend === 0) {
+        nextErrors.dividend = '请输入非 0 的股息金额（红利税可填负数）'
       }
     } else {
       parsedPrice = parseNumber(price) ?? NaN
@@ -159,7 +160,7 @@ export function TransactionForm({
     }
 
     if (editing) {
-      actions.editTransaction({ ...payload, id: editing.id, createdAt: editing.createdAt })
+      actions.editTransaction({ ...editing, ...payload })
     } else {
       actions.createTransaction(payload)
     }
@@ -326,12 +327,12 @@ export function TTradeForm({
   onClose,
 }: {
   visible: boolean
-  stockId: number
+  stockId: string
   sell: TransactionTrade | null
   onClose: () => void
 }) {
   const { state, actions } = useTrade()
-  const [selectedBuyId, setSelectedBuyId] = useState<number | null>(null)
+  const [selectedBuyId, setSelectedBuyId] = useState<string | null>(null)
   const [shares, setShares] = useState('')
   const [error, setError] = useState('')
 
@@ -379,9 +380,11 @@ export function TTradeForm({
     onClose()
   }
 
-  function linkedShares(buyId: number): number {
+  function linkedShares(buyId: string): number {
     return state.tTrades
-      .filter((tt) => tt.buyTransactionId === buyId && tt.sellTransactionId !== currentSell.id)
+      .filter(
+        (tt) => tt.buyTransactionId === buyId && tt.sellTransactionId !== currentSell.id && !tt.deletedAt,
+      )
       .reduce((sum, tt) => sum + tt.shares, 0)
   }
 

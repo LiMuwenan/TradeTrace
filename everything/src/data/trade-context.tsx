@@ -1,25 +1,25 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
+import { loadState, saveState } from './repository'
 import * as mutations from './state'
-import { loadTradeState, saveTradeState } from './storage'
 import { createEmptyState } from './types'
-import type { Stock, TradeState, TransactionTrade, TTrade } from './types'
+import type { Stock, TradeState, TransactionInput, TransactionTrade, TTrade } from './types'
 import { nowIso } from '@/utils/format'
 
 interface TradeActions {
   createAccount: (name: string) => void
-  removeAccount: (accountId: number) => void
+  removeAccount: (accountId: string) => void
   createStock: (input: Pick<Stock, 'accountId' | 'name' | 'code'>) => void
   editStock: (stock: Stock) => void
-  removeStock: (stockId: number) => void
-  createTransaction: (input: Omit<TransactionTrade, 'id' | 'createdAt'>) => void
+  removeStock: (stockId: string) => void
+  createTransaction: (input: TransactionInput) => void
   editTransaction: (trade: TransactionTrade) => void
-  removeTransaction: (transactionId: number) => void
+  removeTransaction: (transactionId: string) => void
   createTTrade: (input: Pick<TTrade, 'buyTransactionId' | 'sellTransactionId' | 'shares'>) => void
-  removeTTrade: (ttradeId: number) => void
-  removeTTradesBySell: (sellId: number) => void
-  /** 用云端数据整体替换本机数据（坚果云同步下载） */
+  removeTTrade: (ttradeId: string) => void
+  removeTTradesBySell: (sellId: string) => void
+  /** 用合并后的状态整体替换本机数据（坚果云合并下载） */
   replaceState: (next: TradeState) => void
 }
 
@@ -37,7 +37,7 @@ export function TradeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
-    loadTradeState().then((loaded) => {
+    loadState().then((loaded) => {
       if (!alive) return
       setState(loaded)
       setReady(true)
@@ -47,39 +47,40 @@ export function TradeProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const commit = useCallback((mutate: (current: TradeState) => TradeState) => {
+  const commit = useCallback((mutate: (current: TradeState, now: string) => TradeState) => {
     setState((current) => {
-      const next = mutate(current)
-      void saveTradeState(next)
+      const next = mutate(current, nowIso())
+      void saveState(next)
       return next
     })
   }, [])
 
   const actions = useMemo<TradeActions>(
     () => ({
-      createAccount: (name) => commit((s) => mutations.addAccount(s, name.trim(), nowIso())),
-      removeAccount: (accountId) => commit((s) => mutations.deleteAccount(s, accountId)),
+      createAccount: (name) => commit((s, now) => mutations.addAccount(s, name.trim(), now)),
+      removeAccount: (accountId) => commit((s, now) => mutations.deleteAccount(s, accountId, now)),
       createStock: (input) =>
-        commit((s) =>
-          mutations.addStock(s, {
-            accountId: input.accountId,
-            name: input.name.trim(),
-            code: input.code.trim(),
-            createdAt: nowIso(),
-          }),
+        commit((s, now) =>
+          mutations.addStock(
+            s,
+            { accountId: input.accountId, name: input.name.trim(), code: input.code.trim() },
+            now,
+          ),
         ),
-      editStock: (stock) => commit((s) => mutations.updateStock(s, stock)),
-      removeStock: (stockId) => commit((s) => mutations.deleteStock(s, stockId)),
-      createTransaction: (input) =>
-        commit((s) => mutations.addTransaction(s, { ...input, createdAt: nowIso() })),
-      editTransaction: (trade) => commit((s) => mutations.updateTransaction(s, trade)),
+      editStock: (stock) => commit((s, now) => mutations.updateStock(s, stock, now)),
+      removeStock: (stockId) => commit((s, now) => mutations.deleteStock(s, stockId, now)),
+      createTransaction: (input) => commit((s, now) => mutations.addTransaction(s, input, now)),
+      editTransaction: (trade) => commit((s, now) => mutations.updateTransaction(s, trade, now)),
       removeTransaction: (transactionId) =>
-        commit((s) => mutations.deleteTransaction(s, transactionId)),
-      createTTrade: (input) =>
-        commit((s) => mutations.addTTrade(s, { ...input, createdAt: nowIso() })),
-      removeTTrade: (ttradeId) => commit((s) => mutations.deleteTTrade(s, ttradeId)),
-      removeTTradesBySell: (sellId) => commit((s) => mutations.deleteTTradesBySell(s, sellId)),
-      replaceState: (next) => commit(() => mutations.normalizeState(next)),
+        commit((s, now) => mutations.deleteTransaction(s, transactionId, now)),
+      createTTrade: (input) => commit((s, now) => mutations.addTTrade(s, input, now)),
+      removeTTrade: (ttradeId) => commit((s, now) => mutations.deleteTTrade(s, ttradeId, now)),
+      removeTTradesBySell: (sellId) =>
+        commit((s, now) => mutations.deleteTTradesBySell(s, sellId, now)),
+      replaceState: (next) => {
+        setState(next)
+        void saveState(next)
+      },
     }),
     [commit],
   )

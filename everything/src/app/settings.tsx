@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Button, Card, ConfirmDialog, Field, Loading, Screen, TopBar } from '@/components/ui'
+import { appendConflictLog } from '@/data/repository'
 import { pullFromCloud, pushToCloud } from '@/data/sync'
 import {
   DEFAULT_WEBDAV_URL,
@@ -17,7 +18,7 @@ import { nowIso } from '@/utils/format'
 import { goBack } from '@/utils/navigation'
 
 export default function SettingsScreen() {
-  const { state, actions } = useTrade()
+  const { state, actions, ready } = useTrade()
   const [config, setConfig] = useState<SyncConfig | null>(null)
   const [url, setUrl] = useState(DEFAULT_WEBDAV_URL)
   const [username, setUsername] = useState('')
@@ -74,6 +75,10 @@ export default function SettingsScreen() {
   }
 
   async function upload() {
+    if (!ready) {
+      showNotice('本机数据仍在加载，请稍候再同步', false)
+      return
+    }
     const saved = await persist()
     if (!saved) return
     setBusy('upload')
@@ -88,12 +93,18 @@ export default function SettingsScreen() {
   }
 
   async function download() {
+    setConfirming(false)
+    if (!ready) {
+      showNotice('本机数据仍在加载，请稍候再同步', false)
+      return
+    }
     const saved = await persist()
     if (!saved) return
     setBusy('download')
-    const result = await pullFromCloud(saved)
+    const result = await pullFromCloud(saved, state, nowIso())
     if (result.ok && result.state) {
       actions.replaceState(result.state)
+      await appendConflictLog(result.conflicts ?? [])
       const next = { ...saved, lastSyncAt: nowIso() }
       await saveSyncConfig(next)
       setConfig(next)
@@ -170,15 +181,15 @@ export default function SettingsScreen() {
             <Button
               label={busy === 'upload' ? '上传中…' : '上传到云端'}
               onPress={upload}
-              disabled={busy !== null}
+              disabled={busy !== null || !ready}
             />
           </View>
           <View style={styles.syncButton}>
             <Button
-              label={busy === 'download' ? '下载中…' : '从云端下载'}
+              label={busy === 'download' ? '合并中…' : '合并下载'}
               variant="secondary"
               onPress={() => setConfirming(true)}
-              disabled={busy !== null || !remoteDeviceId.trim()}
+              disabled={busy !== null || !ready || !remoteDeviceId.trim()}
             />
           </View>
         </View>
@@ -195,7 +206,7 @@ export default function SettingsScreen() {
           1. 坚果云官网登录后，在「安全设置」生成应用密码{'\n'}
           2. A 端填写账号与应用密码后点击「上传到云端」{'\n'}
           3. B 端填写同一账号，并在「远程设备 ID」填入 A 端 ID{'\n'}
-          4. B 端点击「从云端下载」，将覆盖本机全部账户、股票、交易与做T关联{'\n'}
+          4. B 端点击「合并下载」，按修改时间合并双端数据，不会覆盖本机新增记录{'\n'}
           5. 同步文件为 JSON（{remotePath('{设备ID}')}），仅含交易数据，不含密码管理{'\n'}
           6. Web 端受浏览器跨域策略限制，同步可能失败；Android 端可正常使用
         </Text>
@@ -203,9 +214,9 @@ export default function SettingsScreen() {
 
       <ConfirmDialog
         visible={confirming}
-        title="从云端下载"
-        message={`将用远程设备 ${remoteDeviceId.trim() || '（未填写）'} 的数据覆盖本机全部记录，且不可撤销。`}
-        confirmLabel="覆盖下载"
+        title="合并下载"
+        message={`将把远程设备 ${remoteDeviceId.trim() || '（未填写）'} 的数据与本机记录按修改时间合并，不会删除本机新增的记录。`}
+        confirmLabel="合并下载"
         onConfirm={download}
         onCancel={() => setConfirming(false)}
       />

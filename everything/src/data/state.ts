@@ -1,107 +1,170 @@
-import { createEmptyState } from './types'
-import type { Account, Stock, TradeState, TransactionTrade, TTrade } from './types'
+import { createId } from './ids'
+import { computeDedupeKey } from './types'
+import type {
+  Account,
+  EntityMeta,
+  Stock,
+  StockInput,
+  TradeState,
+  TransactionInput,
+  TransactionTrade,
+  TTrade,
+  TTradeInput,
+} from './types'
 
-function nextId(items: { id: number }[]): number {
-  return items.reduce((max, item) => Math.max(max, item.id), 0) + 1
+type MutableLists = Pick<TradeState, 'accounts' | 'stocks' | 'transactions' | 'tTrades'>
+
+/** 任何变更都推进快照版本，供同步合并判断新旧 */
+function touch(state: TradeState, now: string, patch: Partial<MutableLists>): TradeState {
+  return { ...state, ...patch, revision: state.revision + 1, updatedAt: now }
 }
 
-export function addAccount(state: TradeState, name: string, createdAt: string): TradeState {
-  const account: Account = { id: nextId(state.accounts), name, createdAt }
-  return { ...state, accounts: [...state.accounts, account] }
-}
-
-export function deleteAccount(state: TradeState, accountId: number): TradeState {
-  const stockIds = new Set(state.stocks.filter((s) => s.accountId === accountId).map((s) => s.id))
-  const transactionIds = new Set(
-    state.transactions.filter((t) => stockIds.has(t.stockId)).map((t) => t.id),
+/** 软删除：只写墓碑，不物理移除，保证另一台设备上的旧副本不会复活数据 */
+function tombstone<T extends EntityMeta>(
+  items: T[],
+  match: (item: T) => boolean,
+  now: string,
+): T[] {
+  return items.map((item) =>
+    match(item) && !item.deletedAt ? { ...item, deletedAt: now, updatedAt: now } : item,
   )
-  return {
-    ...state,
-    accounts: state.accounts.filter((a) => a.id !== accountId),
-    stocks: state.stocks.filter((s) => s.accountId !== accountId),
-    transactions: state.transactions.filter((t) => !stockIds.has(t.stockId)),
-    tTrades: state.tTrades.filter(
-      (tt) =>
-        !transactionIds.has(tt.buyTransactionId) && !transactionIds.has(tt.sellTransactionId),
-    ),
+}
+
+export function addAccount(state: TradeState, name: string, now: string): TradeState {
+  const account: Account = {
+    id: createId(),
+    name,
+    createdAt: now,
+    updatedAt: now,
   }
+  return touch(state, now, { accounts: [...state.accounts, account] })
 }
 
-export function addStock(state: TradeState, stock: Omit<Stock, 'id'>): TradeState {
-  return { ...state, stocks: [...state.stocks, { ...stock, id: nextId(state.stocks) }] }
-}
-
-export function updateStock(state: TradeState, stock: Stock): TradeState {
-  return {
-    ...state,
-    stocks: state.stocks.map((s) => (s.id === stock.id ? stock : s)),
-  }
-}
-
-export function deleteStock(state: TradeState, stockId: number): TradeState {
-  const transactionIds = new Set(
-    state.transactions.filter((t) => t.stockId === stockId).map((t) => t.id),
+export function deleteAccount(state: TradeState, accountId: string, now: string): TradeState {
+  const stockIds = new Set(
+    state.stocks.filter((item) => item.accountId === accountId && !item.deletedAt).map((item) => item.id),
   )
-  return {
-    ...state,
-    stocks: state.stocks.filter((s) => s.id !== stockId),
-    transactions: state.transactions.filter((t) => t.stockId !== stockId),
-    tTrades: state.tTrades.filter(
-      (tt) =>
-        !transactionIds.has(tt.buyTransactionId) && !transactionIds.has(tt.sellTransactionId),
+  const transactionIds = new Set(
+    state.transactions
+      .filter((item) => stockIds.has(item.stockId) && !item.deletedAt)
+      .map((item) => item.id),
+  )
+  return touch(state, now, {
+    accounts: tombstone(state.accounts, (item) => item.id === accountId, now),
+    stocks: tombstone(state.stocks, (item) => stockIds.has(item.id), now),
+    transactions: tombstone(state.transactions, (item) => transactionIds.has(item.id), now),
+    tTrades: tombstone(
+      state.tTrades,
+      (item) =>
+        transactionIds.has(item.buyTransactionId) || transactionIds.has(item.sellTransactionId),
+      now,
     ),
+  })
+}
+
+export function addStock(state: TradeState, input: StockInput, now: string): TradeState {
+  const stock: Stock = {
+    ...input,
+    id: createId(),
+    createdAt: now,
+    updatedAt: now,
   }
+  return touch(state, now, { stocks: [...state.stocks, stock] })
+}
+
+export function updateStock(state: TradeState, stock: Stock, now: string): TradeState {
+  return touch(state, now, {
+    stocks: state.stocks.map((item) =>
+      item.id === stock.id ? { ...stock, updatedAt: now } : item,
+    ),
+  })
+}
+
+export function deleteStock(state: TradeState, stockId: string, now: string): TradeState {
+  const transactionIds = new Set(
+    state.transactions
+      .filter((item) => item.stockId === stockId && !item.deletedAt)
+      .map((item) => item.id),
+  )
+  return touch(state, now, {
+    stocks: tombstone(state.stocks, (item) => item.id === stockId, now),
+    transactions: tombstone(state.transactions, (item) => transactionIds.has(item.id), now),
+    tTrades: tombstone(
+      state.tTrades,
+      (item) =>
+        transactionIds.has(item.buyTransactionId) || transactionIds.has(item.sellTransactionId),
+      now,
+    ),
+  })
 }
 
 export function addTransaction(
   state: TradeState,
-  trade: Omit<TransactionTrade, 'id'>,
+  input: TransactionInput,
+  now: string,
 ): TradeState {
-  return {
-    ...state,
-    transactions: [...state.transactions, { ...trade, id: nextId(state.transactions) }],
+  const stock = state.stocks.find((item) => item.id === input.stockId)
+  const trade: TransactionTrade = {
+    ...input,
+    id: createId(),
+    createdAt: now,
+    updatedAt: now,
+    source: input.source ?? 'manual',
+    dedupeKey: input.dedupeKey ?? computeDedupeKey(stock?.code ?? '', input),
   }
+  return touch(state, now, { transactions: [...state.transactions, trade] })
 }
 
-export function updateTransaction(state: TradeState, trade: TransactionTrade): TradeState {
-  return {
-    ...state,
-    transactions: state.transactions.map((t) => (t.id === trade.id ? trade : t)),
+export function updateTransaction(
+  state: TradeState,
+  trade: TransactionTrade,
+  now: string,
+): TradeState {
+  const stock = state.stocks.find((item) => item.id === trade.stockId)
+  const updated: TransactionTrade = {
+    ...trade,
+    updatedAt: now,
+    dedupeKey: computeDedupeKey(stock?.code ?? '', trade),
   }
+  return touch(state, now, {
+    transactions: state.transactions.map((item) => (item.id === updated.id ? updated : item)),
+  })
 }
 
-export function deleteTransaction(state: TradeState, transactionId: number): TradeState {
-  return {
-    ...state,
-    transactions: state.transactions.filter((t) => t.id !== transactionId),
-    tTrades: state.tTrades.filter(
-      (tt) =>
-        tt.buyTransactionId !== transactionId && tt.sellTransactionId !== transactionId,
+export function deleteTransaction(
+  state: TradeState,
+  transactionId: string,
+  now: string,
+): TradeState {
+  return touch(state, now, {
+    transactions: tombstone(state.transactions, (item) => item.id === transactionId, now),
+    tTrades: tombstone(
+      state.tTrades,
+      (item) =>
+        item.buyTransactionId === transactionId || item.sellTransactionId === transactionId,
+      now,
     ),
+  })
+}
+
+export function addTTrade(state: TradeState, input: TTradeInput, now: string): TradeState {
+  const ttrade: TTrade = {
+    ...input,
+    id: createId(),
+    createdAt: now,
+    updatedAt: now,
   }
+  return touch(state, now, { tTrades: [...state.tTrades, ttrade] })
 }
 
-export function addTTrade(state: TradeState, ttrade: Omit<TTrade, 'id'>): TradeState {
-  return { ...state, tTrades: [...state.tTrades, { ...ttrade, id: nextId(state.tTrades) }] }
+export function deleteTTrade(state: TradeState, ttradeId: string, now: string): TradeState {
+  return touch(state, now, {
+    tTrades: tombstone(state.tTrades, (item) => item.id === ttradeId, now),
+  })
 }
 
-export function deleteTTrade(state: TradeState, ttradeId: number): TradeState {
-  return { ...state, tTrades: state.tTrades.filter((tt) => tt.id !== ttradeId) }
-}
-
-export function deleteTTradesBySell(state: TradeState, sellId: number): TradeState {
-  return { ...state, tTrades: state.tTrades.filter((tt) => tt.sellTransactionId !== sellId) }
-}
-
-/** 数据校验：读取本地缓存时兜底，避免脏数据导致白屏 */
-export function normalizeState(raw: unknown): TradeState {
-  if (!raw || typeof raw !== 'object') return createEmptyState()
-  const value = raw as Partial<TradeState>
-  return {
-    version: 1,
-    accounts: Array.isArray(value.accounts) ? value.accounts : [],
-    stocks: Array.isArray(value.stocks) ? value.stocks : [],
-    transactions: Array.isArray(value.transactions) ? value.transactions : [],
-    tTrades: Array.isArray(value.tTrades) ? value.tTrades : [],
-  }
+export function deleteTTradesBySell(state: TradeState, sellId: string, now: string): TradeState {
+  return touch(state, now, {
+    tTrades: tombstone(state.tTrades, (item) => item.sellTransactionId === sellId, now),
+  })
 }

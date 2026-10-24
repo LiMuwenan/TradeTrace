@@ -87,7 +87,9 @@ export default function HomeScreen() {
           </View>
           <View style={styles.heroMetaDivider} />
           <View style={styles.heroMeta}>
-            <Text style={styles.heroMetaValue}>{state.stocks.length}</Text>
+            <Text style={styles.heroMetaValue}>
+              {state.stocks.filter((stock) => !stock.deletedAt).length}
+            </Text>
             <Text style={styles.heroMetaLabel}>股票</Text>
           </View>
           <View style={styles.heroMetaDivider} />
@@ -125,7 +127,7 @@ export default function HomeScreen() {
             <RowButton
               key={row.accountId}
               onPress={() =>
-                router.push({ pathname: '/account/[id]', params: { id: String(row.accountId) } })
+                router.push({ pathname: '/account/[id]', params: { id: row.accountId } })
               }
             >
               <Card style={styles.accountCard}>

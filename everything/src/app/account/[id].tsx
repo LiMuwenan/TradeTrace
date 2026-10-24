@@ -28,7 +28,7 @@ import { goBack } from '@/utils/navigation'
 
 export default function AccountDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const accountId = Number(id)
+  const accountId = id
   const { state, ready, actions } = useTrade()
 
   const [formStock, setFormStock] = useState<Stock | null>(null)
@@ -39,11 +39,11 @@ export default function AccountDetailScreen() {
   const [menuStock, setMenuStock] = useState<Stock | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Stock | null>(null)
 
-  const account = state.accounts.find((item) => item.id === accountId)
+  const account = state.accounts.find((item) => item.id === accountId && !item.deletedAt)
 
   const stocks = useMemo(() => {
     return state.stocks
-      .filter((stock) => stock.accountId === accountId)
+      .filter((stock) => stock.accountId === accountId && !stock.deletedAt)
       .map((stock) => {
         const transactions = stockTransactions(state, stock.id)
         return {
@@ -152,7 +152,7 @@ export default function AccountDetailScreen() {
             <RowButton
               key={stock.id}
               onPress={() =>
-                router.push({ pathname: '/stock/[id]', params: { id: String(stock.id) } })
+                router.push({ pathname: '/stock/[id]', params: { id: stock.id } })
               }
             >
               <Card style={styles.stockCard}>

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui'
 import type { ActionItem } from '@/components/ui'
 import {
+  sortTransactionsDesc,
   stockCycleSummary,
   stockTransactions,
   tTradeDetails,
@@ -41,7 +42,7 @@ function typeTone(type: TransactionTrade['type']) {
 
 export default function StockDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const stockId = Number(id)
+  const stockId = id
   const { state, ready, actions } = useTrade()
 
   const [formVisible, setFormVisible] = useState(false)
@@ -50,14 +51,11 @@ export default function StockDetailScreen() {
   const [linkSell, setLinkSell] = useState<TransactionTrade | null>(null)
   const [linkListSell, setLinkListSell] = useState<TransactionTrade | null>(null)
   const [pendingDelete, setPendingDelete] = useState<TransactionTrade | null>(null)
-  const [pendingDeleteTT, setPendingDeleteTT] = useState<number | null>(null)
+  const [pendingDeleteTT, setPendingDeleteTT] = useState<string | null>(null)
 
-  const stock = state.stocks.find((item) => item.id === stockId)
+  const stock = state.stocks.find((item) => item.id === stockId && !item.deletedAt)
   const transactions = useMemo(
-    () =>
-      stockTransactions(state, stockId).sort((a, b) =>
-        b.date === a.date ? b.id - a.id : b.date.localeCompare(a.date),
-      ),
+    () => sortTransactionsDesc(stockTransactions(state, stockId)),
     [state, stockId],
   )
   const summary = useMemo(() => stockCycleSummary(transactions), [transactions])
@@ -83,7 +81,7 @@ export default function StockDetailScreen() {
     setFormVisible(true)
   }
 
-  function tLabelFor(sellId: number): string {
+  function tLabelFor(sellId: string): string {
     const links = ttrades.filter((row) => row.ttrade.sellTransactionId === sellId)
     if (links.length === 0) return ''
     return links
@@ -192,6 +190,10 @@ export default function StockDetailScreen() {
                           手续费 {formatNumber(trade.commission, 2)}
                         </Text>
                       ) : null}
+                      {trade.source === 'ocr' ? (
+                        <Text style={styles.tradeMeta}>OCR 识别</Text>
+                      ) : null}
+                      {trade.time ? <Text style={styles.tradeMeta}>{trade.time}</Text> : null}
                       {trade.note ? <Text style={styles.tradeMeta}>{trade.note}</Text> : null}
                     </View>
                     {tLabel ? <Text style={styles.tLink}>↓ 做T: {tLabel}</Text> : null}
