@@ -2,6 +2,8 @@
 """配置加载测试：验证 APP_CONFIG 环境变量选择配置文件。"""
 from pathlib import Path
 
+import pytest
+
 from app import config
 
 
@@ -109,3 +111,25 @@ def test_server_bind_from_config(tmp_path, monkeypatch):
     cfg = config.load_config()
     assert cfg.bind_host == "0.0.0.0"
     assert cfg.port == 8010
+
+
+def test_cors_wildcard_rejected(tmp_path, monkeypatch):
+    """CORS 禁止通配，避免无鉴权服务被任意站点调用。"""
+    custom = tmp_path / "cfg_wild.yaml"
+    custom.write_text(
+        "cors_origins:\n  - '*'\ndata_dir: data/market\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APP_CONFIG", str(custom))
+    with pytest.raises(ValueError, match="cors_origins"):
+        config.load_config()
+
+
+def test_cors_default_contains_dev_origins(tmp_path, monkeypatch):
+    """默认白名单包含平台 Web 与 Expo Web 开发端口，且不含通配。"""
+    custom = tmp_path / "cfg_cors.yaml"
+    custom.write_text("data_dir: data/market\n", encoding="utf-8")
+    monkeypatch.setenv("APP_CONFIG", str(custom))
+    cfg = config.load_config()
+    assert "*" not in cfg.cors_origins
+    assert "http://127.0.0.1:8081" in cfg.cors_origins

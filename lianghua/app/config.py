@@ -42,7 +42,17 @@ class Config:
         self.smtp_username = str(_s.get("username", ""))
         self.smtp_from = str(_s.get("from_addr", "") or self.smtp_username)
         self.smtp_password_env = str(_s.get("password_env", "SMTP_PASSWORD"))
-        self.cors_origins = data.get("cors_origins", ["http://127.0.0.1:8000"])
+        # CORS 白名单：禁止通配（无鉴权服务只允许本机/局域网显式来源）
+        self.cors_origins = list(data.get("cors_origins") or [
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:8081",
+            "http://localhost:8081",
+        ])
+        if not self.cors_origins or any("*" in o for o in self.cors_origins):
+            raise ValueError("cors_origins 必须是非空白名单，且不得包含通配 '*'")
         self.scan_dirs = data.get("scan_dirs", ["script", "strategy/strategy"])
         self.datasets = data.get("datasets", [])
         # 服务监听：默认仅本机；局域网模式显式改为 0.0.0.0（见 docs/设计方案.md §14）
