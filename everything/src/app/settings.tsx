@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Button, Card, ConfirmDialog, Field, Loading, Screen, TopBar } from '@/components/ui'
+import { loadMarketConfig, saveMarketConfig, validateMarketUrl } from '@/data/market-config'
+import type { MarketConfig } from '@/data/market-config'
+import { loadStockDictionary, testMarketConnection } from '@/data/market-service'
 import { appendConflictLog } from '@/data/repository'
 import { pullFromCloud, pushToCloud } from '@/data/sync'
 import {
@@ -28,6 +31,22 @@ export default function SettingsScreen() {
   const [notice, setNotice] = useState('')
   const [noticeOk, setNoticeOk] = useState(true)
   const [confirming, setConfirming] = useState(false)
+  const [market, setMarket] = useState<MarketConfig | null>(null)
+  const [marketUrl, setMarketUrl] = useState('')
+  const [marketBusy, setMarketBusy] = useState<'test' | 'refresh' | null>(null)
+  const [dictInfo, setDictInfo] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    loadMarketConfig().then((loaded) => {
+      if (!alive) return
+      setMarket(loaded)
+      setMarketUrl(loaded.baseUrl)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -113,6 +132,53 @@ export default function SettingsScreen() {
     showNotice(result.message, result.ok)
   }
 
+  async function persistMarket(): Promise<MarketConfig | null> {
+    if (!market) return null
+    try {
+      const baseUrl = validateMarketUrl(marketUrl)
+      const next: MarketConfig = { ...market, baseUrl }
+      await saveMarketConfig(next)
+      setMarket(next)
+      setMarketUrl(next.baseUrl)
+      return next
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : '地址不合法', false)
+      return null
+    }
+  }
+
+  async function testMarket() {
+    const saved = await persistMarket()
+    if (!saved) return
+    setMarketBusy('test')
+    const result = await testMarketConnection(saved.baseUrl)
+    setMarketBusy(null)
+    if (result.ok) {
+      const reloaded = await loadMarketConfig()
+      setMarket(reloaded)
+    }
+    showNotice(result.message, result.ok)
+  }
+
+  async function refreshDictionary() {
+    const saved = await persistMarket()
+    if (!saved) return
+    setMarketBusy('refresh')
+    try {
+      const dict = await loadStockDictionary({ force: true })
+      setDictInfo(
+        `股票 ${dict.stocks.length} 只，快照生成于 ${dict.generatedAt.slice(0, 10)}` +
+          (dict.stale ? '（离线缓存，可能不是最新）' : ''),
+      )
+      showNotice('股票字典已刷新', true)
+    } catch (error) {
+      setDictInfo('')
+      showNotice(error instanceof Error ? error.message : '刷新失败', false)
+    } finally {
+      setMarketBusy(null)
+    }
+  }
+
   if (!config) {
     return (
       <Screen>
@@ -170,6 +236,45 @@ export default function SettingsScreen() {
         />
         <Button label="保存配置" variant="secondary" onPress={saveOnly} />
       </Card>
+
+      {market ? (
+        <Card style={styles.card}>
+          <Text style={styles.cardTitle}>行情服务</Text>
+          <Text style={styles.hint}>
+            填电脑的局域网地址，例如 http://192.168.1.10:8000；手机与电脑需在同一 Wi-Fi。
+          </Text>
+          <Field
+            label="服务地址"
+            value={marketUrl}
+            onChangeText={setMarketUrl}
+            placeholder="http://192.168.1.10:8000"
+            autoCapitalize="none"
+          />
+          <View style={styles.syncActions}>
+            <View style={styles.syncButton}>
+              <Button
+                label={marketBusy === 'test' ? '测试中…' : '保存并测试连接'}
+                onPress={testMarket}
+                disabled={marketBusy !== null}
+              />
+            </View>
+            <View style={styles.syncButton}>
+              <Button
+                label={marketBusy === 'refresh' ? '刷新中…' : '刷新股票字典'}
+                variant="secondary"
+                onPress={refreshDictionary}
+                disabled={marketBusy !== null}
+              />
+            </View>
+          </View>
+          <Text style={styles.hint}>
+            {market.lastHealthStatus === 'ok'
+              ? `最近连通：${market.lastConnectedAt.slice(0, 19).replace('T', ' ')}`
+              : '尚未连通'}
+          </Text>
+          {dictInfo ? <Text style={styles.hint}>{dictInfo}</Text> : null}
+        </Card>
+      ) : null}
 
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>同步</Text>
