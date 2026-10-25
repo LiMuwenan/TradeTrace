@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .api import cron, datasets, reports, strategies, tasks, stocks
-from .api import v1
+from .api import market, v1
 from .config import Config, load_config
 from .database import init_db
 from .datasources.baostock import BaostockDataSource
@@ -53,6 +53,7 @@ app.include_router(cron.router)
 app.include_router(stocks.router)
 app.include_router(reports.router)
 app.include_router(v1.router)
+app.include_router(market.router)
 
 
 def _cron_trigger(ct) -> None:

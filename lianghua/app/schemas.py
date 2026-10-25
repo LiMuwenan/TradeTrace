@@ -140,3 +140,59 @@ class HealthV1Out(CamelModel):
     name: str = "lianghua"
     version: str = "0.1.0"
     server_time: str = ""
+
+
+class MarketStockOut(CamelModel):
+    code: str
+    name: str = ""
+    market: str = ""
+    industry: str = ""
+
+
+class StockSnapshotOut(CamelModel):
+    schema_version: int = 1
+    generated_at: str = ""
+    count: int = 0
+    stocks: list[MarketStockOut] = []
+
+
+class StockSearchOut(CamelModel):
+    schema_version: int = 1
+    count: int = 0
+    items: list[MarketStockOut] = []
+
+
+class KlineV1Out(CamelModel):
+    schema_version: int = 1
+    code: str = ""
+    market: str = ""
+    raw: KlineSeries = KlineSeries()
+    qfq: KlineSeries = KlineSeries()
+    hfq: KlineSeries = KlineSeries()
+
+
+class IndexKlineOut(CamelModel):
+    schema_version: int = 1
+    code: str = ""
+    name: str = ""
+    market: str = ""
+    dates: list = []
+    open: list = []
+    high: list = []
+    low: list = []
+    close: list = []
+    volume: list = []
+
+
+class DatasetItemOut(CamelModel):
+    name: str
+    type: str = ""
+    latest_data_date: str = ""
+    lag_days: int | None = None
+    file_count: int = 0
+
+
+class DatasetsV1Out(CamelModel):
+    schema_version: int = 1
+    generated_at: str = ""
+    items: list[DatasetItemOut] = []
