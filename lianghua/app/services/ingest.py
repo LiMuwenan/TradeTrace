@@ -39,20 +39,43 @@ def compute_adjusted_prices(row: dict) -> dict:
     }
 
 
-def _row_to_stock_df(rows: List[dict]) -> pd.DataFrame:
-    """把当日全市场 dict 行转成 24 列宽表（含因子与复权价）。"""
+def _num(v) -> float:
+    """baostock 数值字段转 float；空串/None/非法值一律转 NaN。
+
+    不能静默保留原始字符串：字符串乘复权因子会抛
+    TypeError(can't multiply sequence by non-int of type 'float')，
+    单只股票的脏数据就会中断整次多日摄取。
+    """
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def _row_to_stock_df(rows: List[dict],
+                     log: Callable[[str], None] | None = None) -> pd.DataFrame:
+    """把当日全市场 dict 行转成 24 列宽表（含因子与复权价）。
+
+    `log` 提供时，空价格告警会写入任务日志（否则仅留控制台）。
+    """
     records = []
+    blank = 0
     for r in rows:
         r2 = dict(r)
-        # baostock 返回数字为字符串，先对参与复权计算的字段转数值
+        # baostock 返回数字为字符串，先对参与复权计算的字段转数值（失败转 NaN）
         for k in ("open", "high", "low", "close", "qfq_factor", "hfq_factor"):
-            if k in r2 and r2[k] is not None:
-                try:
-                    r2[k] = float(r2[k])
-                except (TypeError, ValueError):
-                    pass
+            if k in r2:
+                r2[k] = _num(r2[k])
+        if any(pd.isna(r2.get(k)) for k in ("open", "high", "low", "close")):
+            blank += 1
         adjust = compute_adjusted_prices(r2)
         records.append({**r2, **adjust})
+    if blank:
+        msg = f"日K 有 {blank} 行价格为空/非数值，已按 NaN 落表（不复权价同为空）"
+        if log:
+            log(msg)
+        else:
+            logger.warning("%s", msg)
     if not records:
         return pd.DataFrame(columns=store.ALL_COLS)
     df = pd.DataFrame(records)
@@ -132,7 +155,7 @@ def run_fetch(root, dates: List[str],
                                      "hfq_factor": factors[code]["hfq_factor"]}
             fac = last_factor.get(code) or {"qfq_factor": 1.0, "hfq_factor": 1.0}
             b["qfq_factor"], b["hfq_factor"] = fac["qfq_factor"], fac["hfq_factor"]
-        df = _row_to_stock_df(bars)
+        df = _row_to_stock_df(bars, log=_log)
         # 原始层留存（审计/可重建）：写失败不阻断主链路
         if daily_dir:
             try:

@@ -72,8 +72,10 @@ def refresh_freshness(data_dir: Path) -> None:
 class TaskService:
     """全局唯一任务调度器。"""
 
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, ds=None):
         self.cfg = cfg
+        # 数据源实例（baostock）；系统启动不登录，任务开始时才 connect
+        self.ds = ds
         self._q: queue.Queue = queue.Queue()
         self.running_task_id: int | None = None
         # 各任务最后日志终点，供前端轮询进度
@@ -306,6 +308,29 @@ class TaskService:
             self._unregister(task_id)
             db.close()
 
+    @staticmethod
+    def _append_log_line(log_path: Path, line: str) -> None:
+        """向任务日志追加一行；写盘失败不掩盖原始异常。"""
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError:
+            logger.exception("写任务日志失败: %s", log_path)
+
+    def _login_source(self, log_path: Path) -> None:
+        """任务开始时登录数据源（系统启动不登录）。
+
+        登录失败时把原因写入任务日志并向上抛，任务落为 failed；
+        避免后续查询全部 0 条却仍被记为「成功」。
+        """
+        if self.ds is None:
+            return
+        try:
+            self.ds.connect()
+        except Exception as exc:  # noqa: BLE001
+            self._append_log_line(log_path, f"$ baostock 登录失败：{exc}")
+            raise
+
     def _run_ingest(self, task, log_path: Path) -> dict:
         """内建获取数据：调用 ingest.run_fetch，协作式取消走任务取消事件。
 
@@ -341,6 +366,8 @@ class TaskService:
                 start = start_arg
             else:
                 start = _resolve_start(start_arg, ds_latest, freshness)
+            # 任务开始时登录（系统启动不登录）；失败则在任务日志留痕并中止
+            self._login_source(log_path)
             dates = trade_dates(start, today)
 
             log_path.write_text(
@@ -373,6 +400,7 @@ class TaskService:
             }
         except Exception as exc:  # noqa: BLE001
             logger.exception("内建摄取任务 %s 异常", task.id)
+            self._append_log_line(log_path, f"$ 任务失败：{exc}")
             return {
                 "exit_code": None,
                 "status": "failed",
@@ -388,6 +416,8 @@ class TaskService:
         cancel_flag = self.cancel_event(task.id).is_set
         try:
             log_path.write_text("$ 每日大盘汇总\n", encoding="utf-8")
+            # 任务开始时登录（系统启动不登录）；失败则在任务日志留痕并中止
+            self._login_source(log_path)
 
             def _log(line: str) -> None:
                 with open(log_path, "a", encoding="utf-8") as f:
@@ -411,6 +441,7 @@ class TaskService:
             }
         except Exception as exc:  # noqa: BLE001
             logger.exception("报告任务 %s 异常", task.id)
+            self._append_log_line(log_path, f"$ 任务失败：{exc}")
             return {"exit_code": None, "status": "failed",
                     "summary": {"error": str(exc)}, "output_files": []}
         finally:
@@ -548,10 +579,10 @@ class TaskService:
 _service: TaskService | None = None
 
 
-def init_task_service(cfg: Config) -> TaskService:
+def init_task_service(cfg: Config, ds=None) -> TaskService:
     global _service
     if _service is None:
-        _service = TaskService(cfg)
+        _service = TaskService(cfg, ds)
     return _service
 
 
