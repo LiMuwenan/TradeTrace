@@ -45,6 +45,10 @@ class Config:
         self.cors_origins = data.get("cors_origins", ["http://127.0.0.1:8000"])
         self.scan_dirs = data.get("scan_dirs", ["script", "strategy/strategy"])
         self.datasets = data.get("datasets", [])
+        # 服务监听：默认仅本机；局域网模式显式改为 0.0.0.0（见 docs/设计方案.md §14）
+        _srv = data.get("server", {}) or {}
+        self.bind_host = str(_srv.get("bind_host", "127.0.0.1"))
+        self.port = int(_srv.get("port", 8000))
         self.task_timeout_sec = int(data.get("task_timeout_sec", 7200))
 
     @staticmethod

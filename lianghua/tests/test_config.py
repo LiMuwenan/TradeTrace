@@ -83,3 +83,29 @@ def test_report_defaults_when_absent(tmp_path, monkeypatch):
     assert cfg.smtp_host == "smtp.126.com"
     assert cfg.smtp_port == 465
     assert len(cfg.report_index_codes) == 8
+
+
+def test_server_bind_defaults_to_localhost(tmp_path, monkeypatch):
+    """未配置 server 段时仍只监听本机，端口默认 8000。"""
+    custom = tmp_path / "cfg_server.yaml"
+    custom.write_text("data_dir: data/market\n", encoding="utf-8")
+    monkeypatch.setenv("APP_CONFIG", str(custom))
+    cfg = config.load_config()
+    assert cfg.bind_host == "127.0.0.1"
+    assert cfg.port == 8000
+
+
+def test_server_bind_from_config(tmp_path, monkeypatch):
+    """显式配置 0.0.0.0 时按配置生效（局域网模式）。"""
+    custom = tmp_path / "cfg_lan.yaml"
+    custom.write_text(
+        "server:\n"
+        "  bind_host: 0.0.0.0\n"
+        "  port: 8010\n"
+        "data_dir: data/market\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APP_CONFIG", str(custom))
+    cfg = config.load_config()
+    assert cfg.bind_host == "0.0.0.0"
+    assert cfg.port == 8010
