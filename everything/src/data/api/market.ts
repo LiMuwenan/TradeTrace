@@ -39,6 +39,13 @@ export interface KlineResponse {
   hfq: KlineSeries
 }
 
+export interface IndexKlineResponse extends KlineSeries {
+  schemaVersion: number
+  code: string
+  name: string
+  market: string
+}
+
 export interface HealthResponse {
   schemaVersion: number
   status: string
@@ -105,6 +112,19 @@ export async function fetchKline(
     to: options.to,
   })}`
   return requestJson<KlineResponse>(baseUrl, path, options)
+}
+
+/** 指数日K：协议要求代码必须带市场前缀（如 sh000300） */
+export async function fetchIndexKline(
+  baseUrl: string,
+  code: string,
+  options: RequestOptions & { from?: string; to?: string } = {},
+): Promise<IndexKlineResponse> {
+  const path = `/api/v1/market/index/${encodeURIComponent(code)}/kline${query({
+    from: options.from,
+    to: options.to,
+  })}`
+  return requestJson<IndexKlineResponse>(baseUrl, path, options)
 }
 
 export async function fetchDatasets(

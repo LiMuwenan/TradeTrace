@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchKline, fetchSnapshot, searchStocks } from './market'
+import { fetchIndexKline, fetchKline, fetchSnapshot, searchStocks } from './market'
 
 const BASE = 'http://192.168.1.10:8000'
 
@@ -47,5 +47,39 @@ describe('market api', () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       `${BASE}/api/v1/market/stocks/600519/kline?from=2026-01-01&to=2026-10-25`,
     )
+  })
+
+  it('指数 K 线按协议路径拼装并解析平铺响应', async () => {
+    const fetchMock = vi.fn(async (_url: string) =>
+      ok({
+        schemaVersion: 1,
+        code: 'sh000300',
+        name: '沪深300',
+        market: 'SH',
+        dates: ['2026-01-02'],
+        open: [3960],
+        high: [4001.2],
+        low: [3950.1],
+        close: [3980.12],
+        volume: [123456789],
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await fetchIndexKline(BASE, 'sh000300', {
+      from: '2026-01-01',
+      to: '2026-10-25',
+    })
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/api/v1/market/index/sh000300/kline?from=2026-01-01&to=2026-10-25`,
+    )
+    expect(out.schemaVersion).toBe(1)
+    expect(out.code).toBe('sh000300')
+    expect(out.name).toBe('沪深300')
+    expect(out.market).toBe('SH')
+    expect(out.dates).toEqual(['2026-01-02'])
+    expect(out.open).toEqual([3960])
+    expect(out.high).toEqual([4001.2])
+    expect(out.low).toEqual([3950.1])
+    expect(out.close).toEqual([3980.12])
+    expect(out.volume).toEqual([123456789])
   })
 })
