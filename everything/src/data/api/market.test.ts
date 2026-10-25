@@ -12,7 +12,7 @@ describe('market api', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('快照请求命中协议路径', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string) =>
       ok({ schemaVersion: 1, generatedAt: '2026-10-25T02:30:00Z', count: 0, stocks: [] }),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -22,7 +22,7 @@ describe('market api', () => {
   })
 
   it('搜索参数做 URL 编码并跳过空关键词', async () => {
-    const fetchMock = vi.fn(async () => ok({ schemaVersion: 1, count: 0, items: [] }))
+    const fetchMock = vi.fn(async (_url: string) => ok({ schemaVersion: 1, count: 0, items: [] }))
     vi.stubGlobal('fetch', fetchMock)
     await searchStocks(BASE, '贵州 茅台', { limit: 20 })
     expect(fetchMock.mock.calls[0][0]).toBe(
@@ -33,7 +33,7 @@ describe('market api', () => {
   })
 
   it('K 线区间参数拼装正确', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string) =>
       ok({
         schemaVersion: 1,
         code: '600519',
@@ -41,8 +41,7 @@ describe('market api', () => {
         raw: { dates: [], open: [], high: [], low: [], close: [], volume: [] },
         qfq: { dates: [], open: [], high: [], low: [], close: [], volume: [] },
         hfq: { dates: [], open: [], high: [], low: [], close: [], volume: [] },
-      }),
-    )
+      }))
     vi.stubGlobal('fetch', fetchMock)
     await fetchKline(BASE, '600519', { from: '2026-01-01', to: '2026-10-25' })
     expect(fetchMock.mock.calls[0][0]).toBe(

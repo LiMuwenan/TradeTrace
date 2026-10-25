@@ -51,7 +51,9 @@ describe('requestJson', () => {
       'fetch',
       vi.fn(async () => jsonResponse({ code: 'RANGE_TOO_LARGE', message: '区间过大' }, 422)),
     )
-    const error = await requestJson('http://192.168.1.10:8000', '/x').catch((e) => e)
+    const error = (await requestJson('http://192.168.1.10:8000', '/x').catch(
+      (e: unknown) => e,
+    )) as MarketApiError
     expect(error).toBeInstanceOf(MarketApiError)
     expect(error).toMatchObject({ kind: 'business', code: 'RANGE_TOO_LARGE', status: 422 })
     expect(error.message).toBe('区间过大')
