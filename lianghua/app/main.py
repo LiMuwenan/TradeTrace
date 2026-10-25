@@ -11,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .api import cron, datasets, reports, strategies, tasks, stocks
+from .api import v1
 from .config import Config, load_config
 from .database import init_db
 from .datasources.baostock import BaostockDataSource
+from .errors import ApiError, api_error_handler
 from .services import dataset_scan, index_ingest, ingest, report_service, scanner
 from .services.scheduler import get_scheduler
 from .services.task_service import init_task_service, get_service
@@ -42,12 +44,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_exception_handler(ApiError, api_error_handler)
+
 app.include_router(datasets.router)
 app.include_router(strategies.router)
 app.include_router(tasks.router)
 app.include_router(cron.router)
 app.include_router(stocks.router)
 app.include_router(reports.router)
+app.include_router(v1.router)
 
 
 def _cron_trigger(ct) -> None:

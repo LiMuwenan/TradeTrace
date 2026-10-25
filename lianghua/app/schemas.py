@@ -3,7 +3,8 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
 # ---------- 策略 ----------
@@ -125,3 +126,17 @@ class CronOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------- v1 协议（camelCase 输出，见 docs/protocols） ----------
+class CamelModel(BaseModel):
+    """v1 协议基类：Python 侧 snake_case，JSON 输出 camelCase。"""
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class HealthV1Out(CamelModel):
+    schema_version: int = 1
+    status: str = "ok"
+    name: str = "lianghua"
+    version: str = "0.1.0"
+    server_time: str = ""
