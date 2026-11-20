@@ -38,3 +38,7 @@ async function request(path, options = {}) {
 export function fetchHealth() {
   return request('/health')
 }
+
+export function fetchDataStatus() {
+  return request('/data/status')
+}

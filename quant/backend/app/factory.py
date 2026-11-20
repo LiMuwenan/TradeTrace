@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import health
+from app.api import data, health
 from app.config import Settings, load_settings
 from app.schemas import fail
 
@@ -41,4 +41,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=422, content=fail(422, "请求参数不合法"))
 
     app.include_router(health.router, prefix=API_PREFIX)
+    app.include_router(data.router, prefix=API_PREFIX)
     return app

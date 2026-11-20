@@ -25,6 +25,18 @@ config/               config.example.toml 入库，config.toml 不入库
 data/                 不入库：raw/ 原始 CSV 归档，parquet/ 按年分区
 ```
 
+## 数据布局
+
+```
+data/raw/daily/YYYY-MM-DD.csv     全市场日 K 横截面（18 列，UTF-8 BOM）
+data/raw/factors/YYYY-MM-DD.csv   当日除权清单（可为空，只有除权标的）
+data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_factor
+data/parquet/store_state.json     因子基准与最近一次导入结果
+```
+
+所有入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开写路径。
+实时抓取到的数据同样先归档成上面两份 CSV，再走同一条导入路径。
+
 ## 边界
 
 - **禁止 import 或引用 `lianghua/`、`everything/` 的源码与数据文件**；复用通过复制代码或重建数据实现，不跨项目共享。
@@ -39,6 +51,8 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m app          # 监听地址与端口取自 config/config.toml
+.\.venv\Scripts\python.exe -m app.import_history [历史目录]  # 默认读 config 的 raw_dir
+.\.venv\Scripts\python.exe -m app.daily_update [YYYY-MM-DD]  # 每日增量，默认今天
 
 # 前端（在 quant/web 下）
 npm install

@@ -8,6 +8,12 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     # Windows 没有系统时区库，zoneinfo 需要它才能解析 Asia/Shanghai
     "tzdata>=2024.1",
+    # 行情导入与查询：CSV → Parquet，DuckDB 直读
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "duckdb>=1.1",
+    # 每日增量取数；测试中用假数据替换，不访问网络
+    "baostock>=0.8.9",
 ]
 
 [project.optional-dependencies]

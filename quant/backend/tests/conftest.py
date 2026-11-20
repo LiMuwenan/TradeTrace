@@ -29,3 +29,18 @@ def config_path(tmp_path):
 @pytest.fixture
 def settings(config_path) -> Settings:
     return load_settings(config_path)
+
+
+@pytest.fixture
+def local_settings(tmp_path) -> Settings:
+    """数据目录全部指向 tmp，避免测试写进项目的 quant/data。"""
+    return Settings(
+        config_path=tmp_path / "config.toml",
+        host="127.0.0.1",
+        port=8000,
+        raw_dir=tmp_path / "raw",
+        parquet_dir=tmp_path / "parquet",
+        timezone="Asia/Shanghai",
+        log_level="INFO",
+        cors_origins=["http://localhost:5173"],
+    )
