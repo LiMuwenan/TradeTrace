@@ -56,11 +56,22 @@
 
 ## 6. Git 执行准则（全仓库强制）
 
-本节对 `lianghua/` 与 `everything/` 同时生效。子目录 `AGENTS.md` 只能在此基础上补充项目特有约束（分支名、禁止提交的文件类型等），**不得放宽或违背本节**；两处规则冲突时以本节为准。
+本节对 `lianghua/`、`everything/` 与 `quant/` 同时生效。子目录 `AGENTS.md` 只能在此基础上补充项目特有约束（分支名、禁止提交的文件类型等），**不得放宽或违背本节**；两处规则冲突时以本节为准。
 
 - **禁止 reset／破坏性回退**：不得执行 `git reset`（含 `--hard`、`--soft`、`--mixed`）、`git checkout -- .`、`git restore .`、`git clean -fd` 等会丢失工作区或历史的操作。确需回退时先用文字说明原因与影响范围，取得用户明确授权后再执行。
-- **按 task 小步提交**：以规划文档（各项目 `docs/plans/`）中的 task 为单位，每完成并验证一个 task 就提交一次；不把多个 task 攒成一次提交，也不把一个 task 拆成无意义的碎提交。
+- **按 task 小步提交**：以规划文档中的 task 为单位（`lianghua/`、`everything/` 见各自 `docs/plans/`，`quant/` 见 `.scratch/quant-p0/` 下的 ticket），每完成并验证一个 task 就提交一次；不把多个 task 攒成一次提交，也不把一个 task 拆成无意义的碎提交。
+- **可以提交**：完成并验证一个 task 后，AI 可直接提交，不需要逐次征求同意；推送仍按下方「不擅自 push」执行。
 - **提交前先看清改动**：先执行 `git status` 与 `git diff`，再按文件逐个 `git add`，避免误提交行情数据、构建产物、截图或敏感信息。
 - **提交信息**：一句话说明该 task 做了什么，并与规划文档中的 task 描述对应。
 - **不擅自 push**：除用户明确要求外不推送远程；禁止向 `main` 强推。
 - **不跳过钩子**：不得使用 `--no-verify` 等方式绕过 hooks；钩子失败先定位并修复问题。
+
+## Agent skills
+
+### Issue tracker
+
+Issues 以 local markdown 存放在 `.scratch/<feature>/`，一个 ticket 一个文件。See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+single-context：根目录 `GLOSSARY.md` + `docs/adr/`。See `docs/agents/domain.md`.
