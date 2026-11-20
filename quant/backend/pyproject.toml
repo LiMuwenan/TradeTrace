@@ -1,0 +1,21 @@
+[project]
+name = "quant-backend"
+version = "0.1.0"
+description = "A 股量化数据分析与预警平台（只读行情，不接交易）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    # Windows 没有系统时区库，zoneinfo 需要它才能解析 Asia/Shanghai
+    "tzdata>=2024.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,15 @@
+# 本地配置（含主题名、邮箱等，不入库）
+config/config.toml
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 前端
+web/node_modules/
+web/dist/
+
+# 数据：原始归档与派生 Parquet 都不入库
+data/

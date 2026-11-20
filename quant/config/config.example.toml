@@ -1,0 +1,19 @@
+[server]
+# 局域网内其他设备（手机、另一台电脑）要访问时改为 "0.0.0.0"
+host = "127.0.0.1"
+port = 8000
+
+[data]
+# 原始 CSV 归档：不可变的事实源，任何时候都能据此重建 Parquet
+raw_dir = "data/raw"
+# 按年份分区的 Parquet：由原始数据派生的索引
+parquet_dir = "data/parquet"
+
+[app]
+timezone = "Asia/Shanghai"
+log_level = "INFO"
+# 服务无鉴权，只允许显式列出的前端来源，禁止使用 "*"
+cors_origins = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
