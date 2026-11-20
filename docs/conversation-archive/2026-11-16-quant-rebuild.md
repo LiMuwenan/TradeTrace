@@ -186,3 +186,20 @@
 - **[待办]** 逐票 `/zh-implement`，每票之间 `/clear`。
 
 > 依据：用户「我想重新做这个产品，不再在lianghua和everything上做迭代。」；Agent「Online 只读行情 → 看得懂 → 算得清 → 叫得醒」「如果只能先做一件事，我建议做『自选 + 分级预警 + 预警事后验证』这条最小链路」。
+
+## 2026-11-20（Ticket 02 实现完成）
+
+- **[产物]** Ticket 02 完成并提交 `9e825ca`：`app/storage/{schema,parquet_store,sources,store_state,ingest}.py`、`app/services/data_status.py`、`app/api/data.py`、`app/import_history.py`、`app/daily_update.py`、前端「数据状态」卡片；后端 33 个测试通过。
+- **[决策·已定]** 唯一写入口为 `Ingestor.ingest_days`（`ingest_day` 是单日包装）；历史 CSV 与实时接口都产出同一 `DaySnapshot`，只允许这一条写路径。
+- **[决策·已定]** 按年份单文件 `<年份>.parquet`，写入用临时文件 + `os.replace` 原子替换；合并时按 (标的, 日期) 去重、后写覆盖。
+- **[决策·已定]** 因子事件（除权清单）映射到「当天或之后第一个有日 K 的交易日」，避免某天漏采日 K 时永久丢失除权事件。
+- **[术语]** 因子基准（scale）：每个标的首见官方后复权因子时记录的除数，`back_factor = 官方因子 ÷ scale`，使中段导入的序列也从 1 起连续；已写入 `GLOSSARY.md`。
+- **[决策·已定]** 校验失败时不得写入 `store_state.json`：`scales` 必须拷贝后使用，否则已推导的基准会被错误落盘。
+- **[决策·已定]** 停牌行（`tradestatus=0`）保留入库；停牌日除权无法用「昨收 ÷ preclose」还原增量时，保持原因子并告警，不中断当日写入。
+- **[纠正]** 停牌日除权「因子塌回 1」只在 `scale` 缺失（如 store_state 丢失后重建）时发生；`scale` 已存在时官方累积值本身可正确换算，不会塌回。
+- **[契约]** `GET /api/v1/data/status` 返回 `totalRows/dateRange/years/missingDates/lastImport`；`lastImport` 含 `tradeDates/rows/replacedRows/source/ranAt/elapsedMs/status/warnings`。`GET /api/v1/data/series?code&start&end` 接受 `sh.600000`/`600000` 等写法，返回归一后的 `code` 与 `backFactor/adjOpen/adjHigh/adjLow/adjClose`。
+- **[决策·已定]** 「缺失交易日」= `raw/daily` 已归档但 Parquet 尚无的日期，不引入交易日历，避免把休市日误报为缺失。
+- **[待办]** 代码审查提出但本期未做：导入 manifest（重复行、因子缺失标的清单）、增量游标、官方因子与 `preclose` 的全量对账（目前仅在首次见到官方因子时对账）。
+- **[待办]** 下一票 Ticket 03（自选）可开始；每票之间 `/clear`。
+
+> 依据：用户「Use Skill: zh-implement」；ticket 02「存在唯一的数据写入入口；任何数据入库都必须经过它，没有第二条写路径」；Agent「33 passed」「写入 5132 行（覆盖 5132 行），耗时 120 ms」。
