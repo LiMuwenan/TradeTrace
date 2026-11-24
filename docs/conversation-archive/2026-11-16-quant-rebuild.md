@@ -274,3 +274,9 @@
 - **[开放问题]** `StockDirectory.ensure()` 兜底范围怎么改未决：方案 A 在 `ensure()` 捕获 `Exception` + `logger.warning` 退回旧缓存（推荐）、方案 B 在 `BaostockNameProvider.fetch_names()` 统一包成 `IngestError`、或暂不改。用户答「先不要动代码，我先看看」，代码未改动。
 
 > 依据：用户「可能违规：stock_names.py 的 `ensure()` 只捕获 `IngestError`……这一条具体解释一下，我看看应该如何修改」；Agent「这条不是『断网必 500』，而是『兜底承诺不严密』」；用户「先不要动代码，我先看看」。
+
+## 2026-11-24（ensure 兜底方案 A 实施）
+
+- **[决策·已定]** 采用方案 A：`StockDirectory.ensure()` 捕获 `Exception`（不捕获 `BaseException`），`logger.warning` 记录后沿用旧缓存/空字典。理由：名称字典是尽力而为的外部依赖，`refresh()` 可能抛 `UnboundLocalError`、`IndexError`、`bs.logout()` 异常与 `_write_cache()` 的 `OSError`，不应冒到接口变 500。放弃方案 B（provider 统一转 `IngestError`）：覆盖不到 `_write_cache`，且需重构 `finally: bs.logout()` 以免掩盖原异常。代价：掩盖非预期编程错误的可见性，靠 warning 日志兜底。新增两条 `RuntimeError` 测试（搜索退回按代码搜索、`POST /watchlist` 仍 200），全量 `pytest -q` 46 passed。提交 `68045a7`。
+
+> 依据：用户「按方案 A 修改代码」；Agent「`except Exception as exc:  # 名称字典是尽力而为的外部依赖，失败不应阻断自选与搜索`」。
