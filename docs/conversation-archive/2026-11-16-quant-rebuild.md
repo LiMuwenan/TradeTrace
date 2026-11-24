@@ -280,3 +280,12 @@
 - **[决策·已定]** 采用方案 A：`StockDirectory.ensure()` 捕获 `Exception`（不捕获 `BaseException`），`logger.warning` 记录后沿用旧缓存/空字典。理由：名称字典是尽力而为的外部依赖，`refresh()` 可能抛 `UnboundLocalError`、`IndexError`、`bs.logout()` 异常与 `_write_cache()` 的 `OSError`，不应冒到接口变 500。放弃方案 B（provider 统一转 `IngestError`）：覆盖不到 `_write_cache`，且需重构 `finally: bs.logout()` 以免掩盖原异常。代价：掩盖非预期编程错误的可见性，靠 warning 日志兜底。新增两条 `RuntimeError` 测试（搜索退回按代码搜索、`POST /watchlist` 仍 200），全量 `pytest -q` 46 passed。提交 `68045a7`。
 
 > 依据：用户「按方案 A 修改代码」；Agent「`except Exception as exc:  # 名称字典是尽力而为的外部依赖，失败不应阻断自选与搜索`」。
+
+## 2026-11-24（四项审查判断项解释）
+
+- **[风险]** `meta_dir` 与既有 `raw_dir` / `parquet_dir` 一样只做路径解析、不做可写性校验；`save_watchlist` 的 `OSError` 在 `POST /watchlist` 未被捕获，会走 FastAPI 默认 500 并破坏 `{code,message}` 错误体。
+- **[开放问题]** `watchlist.json` 解析失败时 `load_watchlist` 静默返回空清单，下一次 `POST /watchlist` 会用原子替换覆盖损坏文件且无备份；是否改为「严格报错」「改名备份 + 日志告警」或维持现状，待用户决策。
+- **[开放问题]** `api/watchlist.py` 用 `str(exc)` 透出 `IngestError` 文案，与 `data.py` 的固定文案不一致；`DELETE /watchlist/{code}` 在 API 与 service 各调用一次 `normalize_code`；两者是否统一待决策。搜索对 `sh600000` 不命中属于子串匹配问题，与双重归一无关。
+- **[开放问题]** `StockDirectory`（实为名称缓存）、`ensure()`、`_present` 命名是否调整待决策。
+
+> 依据：用户「判断项：watchlist_store.py 在 JSON 损坏时静默返回空清单……做详细解释，解释完我看过后再决策如何修改」；Agent「损坏只会在下一次 `POST /watchlist` 落盘时被覆盖，删除不会触发写盘」。
