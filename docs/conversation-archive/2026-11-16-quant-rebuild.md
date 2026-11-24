@@ -298,3 +298,11 @@
 - **[决策·已定]** 命名调整：`StockDirectory` → `StockNameCache`，`app.state.stock_directory` → `app.state.stock_names`，`create_app(stock_names=...)`；`_present` → `_to_item`；`ensure()` 保留原名。验证：`pytest -q` 48 passed。
 
 > 依据：用户「1:按推荐 2：启动时探测 3a：固定文案 3b：按推荐改 4：按推荐」；Agent「自选文件损坏或不可读：<path>」「启动时验证数据目录可写，避免问题拖到首次写入才暴露」。
+
+## 2026-11-24（五项疑似问题核查）
+
+- **[纠正]** 「停牌语义只有 Web 端能拿到」不成立：`ParquetStore.latest_bars` 由 `tradestatus == 0` 产出 `suspended`，`_to_item` 已把该字段随响应返回；Web 只是消费它渲染「停牌」。`pctChg=0` 是源字段原值，符合「停牌只加标记、不改写数值」的既定口径。
+- **[纠正]** 「自选文件损坏静默清空」已在提交 `6d2b67f` 修复：`load_watchlist` 抛 `WatchlistCorruptError`，工厂映射 500 并保留原文件，有测试 `test_corrupt_watchlist_is_reported_and_not_overwritten`。
+- **[开放问题]** 搜索不支持 `sh600000` / `600000.SH`（按子串匹配 `sh.600000`）；空查询固定返回 `namesAvailable=true`；名称字典仅按 `type=1/status=1` 过滤，未排除 B 股（`sh.900*` / `sz.200*`）。三项是否修待用户决策。
+
+> 依据：用户「检查这几项 疑似实现有误」；Agent「`suspended` 已在响应里」「`stock_names.py` 的过滤只有 `type=1` 与 `status=1`，B 股也是 `type=1`」。
