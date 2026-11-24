@@ -267,3 +267,10 @@
 - **[决策·已定]** `quant/AGENTS.md` 改为「所有**行情数据**入库都必须经过 `Ingestor`，不得另开行情写路径」，并补一句「`data/meta/` 下的用户数据与字典缓存不属于行情数据，由各自的 store 原子写入」。提交 `dd04173`；仅文档改动。
 
 > 依据：用户「改正文档」；Agent「所有**行情数据**入库都必须经过……`data/meta/` 下的用户数据与字典缓存不属于行情数据」。
+
+## 2026-11-24（ensure 兜底范围分析）
+
+- **[纠正]** 「baostock 断网会让 `ensure()` 抛非 `IngestError` 导致 500」不成立为通例：常见断网时 `send_msg()` 的 `except Exception` 会吞掉网络异常并返回 `None`，现有代码已转成 `IngestError`；真正会逃逸的是 `SocketUtil.connect()` 中 `mySockect` 未绑定引发的 `UnboundLocalError`、残缺回包解析的 `IndexError`、`finally: bs.logout()` 抛出的异常（并会覆盖原 `IngestError`）、以及 `_write_cache()` 的 `OSError`。
+- **[开放问题]** `StockDirectory.ensure()` 兜底范围怎么改未决：方案 A 在 `ensure()` 捕获 `Exception` + `logger.warning` 退回旧缓存（推荐）、方案 B 在 `BaostockNameProvider.fetch_names()` 统一包成 `IngestError`、或暂不改。用户答「先不要动代码，我先看看」，代码未改动。
+
+> 依据：用户「可能违规：stock_names.py 的 `ensure()` 只捕获 `IngestError`……这一条具体解释一下，我看看应该如何修改」；Agent「这条不是『断网必 500』，而是『兜底承诺不严密』」；用户「先不要动代码，我先看看」。
