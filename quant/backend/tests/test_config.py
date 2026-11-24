@@ -17,6 +17,7 @@ def test_loads_and_resolves_dirs_against_project_root(settings):
     assert settings.port == 8123
     assert settings.parquet_dir == (PROJECT_ROOT / "data/parquet").resolve()
     assert settings.raw_dir == (PROJECT_ROOT / "data/raw").resolve()
+    assert settings.meta_dir == (PROJECT_ROOT / "data/meta").resolve()
     assert settings.timezone == "Asia/Shanghai"
 
 

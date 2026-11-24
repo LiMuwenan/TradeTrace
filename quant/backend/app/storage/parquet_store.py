@@ -103,6 +103,43 @@ class ParquetStore:
             for row in frame.itertuples(index=False)
         }
 
+    def latest_bars(self, codes: list[str]) -> dict[str, dict]:
+        """取每个标的的最新一行，用于自选列表的行情摘要。"""
+        wanted = list(dict.fromkeys(codes))
+        files = self.year_files()
+        if not wanted or not files:
+            return {}
+
+        placeholders = ", ".join("?" for _ in wanted)
+        sql = f"""
+            SELECT code, date, close, pctChg, tradestatus
+            FROM (
+                SELECT code, date, close, pctChg, tradestatus,
+                       row_number() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                FROM {self._read_sql()}
+                WHERE code IN ({placeholders})
+            )
+            WHERE rn = 1
+        """
+        frame = self._query(sql, wanted)
+        return {
+            row.code: {
+                "date": row.date,
+                "close": _none_if_nan(row.close),
+                "pctChg": _none_if_nan(row.pctChg),
+                "suspended": int(row.tradestatus) == 0,
+            }
+            for row in frame.itertuples(index=False)
+        }
+
+    def codes(self) -> list[str]:
+        """已入库的全部标的代码，按代码升序。"""
+        files = self.year_files()
+        if not files:
+            return []
+        frame = self._query(f"SELECT DISTINCT code FROM {self._read_sql()} ORDER BY code")
+        return frame["code"].tolist()
+
     def series(self, code: str, start: str | None = None, end: str | None = None) -> list[dict]:
         """按标的读取逐日序列，附带后复权价。"""
         files = self.year_files()

@@ -7,14 +7,15 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import data, health
+from app.api import data, health, watchlist
 from app.config import Settings, load_settings
 from app.schemas import fail
+from app.storage.stock_names import BaostockNameProvider, StockDirectory
 
 API_PREFIX = "/api/v1"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, stock_directory: StockDirectory | None = None) -> FastAPI:
     settings = settings or load_settings()
 
     app = FastAPI(
@@ -23,6 +24,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
     )
     app.state.settings = settings
+    app.state.stock_directory = stock_directory or StockDirectory(
+        settings.meta_dir, BaostockNameProvider()
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -42,4 +46,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(data.router, prefix=API_PREFIX)
+    app.include_router(watchlist.router, prefix=API_PREFIX)
     return app

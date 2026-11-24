@@ -40,6 +40,7 @@ def local_settings(tmp_path) -> Settings:
         port=8000,
         raw_dir=tmp_path / "raw",
         parquet_dir=tmp_path / "parquet",
+        meta_dir=tmp_path / "meta",
         timezone="Asia/Shanghai",
         log_level="INFO",
         cors_origins=["http://localhost:5173"],

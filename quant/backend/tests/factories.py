@@ -19,6 +19,7 @@ def bar(
     preclose: float | None = None,
     volume: str | float = 1000,
     tradestatus: int = 1,
+    pct_chg: float = 0,
 ) -> dict:
     return {
         "date": trade_date,
@@ -33,7 +34,7 @@ def bar(
         "adjustflag": 3,
         "turn": 0.1,
         "tradestatus": tradestatus,
-        "pctChg": 0,
+        "pctChg": pct_chg,
         "peTTM": 10,
         "pbMRQ": 1,
         "psTTM": 1,

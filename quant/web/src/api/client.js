@@ -42,3 +42,22 @@ export function fetchHealth() {
 export function fetchDataStatus() {
   return request('/data/status')
 }
+
+export function fetchWatchlist() {
+  return request('/watchlist')
+}
+
+export function addToWatchlist(code) {
+  return request('/watchlist', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+}
+
+export function removeFromWatchlist(code) {
+  return request(`/watchlist/${encodeURIComponent(code)}`, { method: 'DELETE' })
+}
+
+export function searchStocks(keyword) {
+  return request(`/stocks/search?q=${encodeURIComponent(keyword)}`)
+}

@@ -37,6 +37,7 @@ class Settings:
     port: int
     raw_dir: Path
     parquet_dir: Path
+    meta_dir: Path
     timezone: str
     log_level: str
     cors_origins: list[str] = field(default_factory=list)
@@ -91,6 +92,8 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
         port=port,
         raw_dir=_resolve_dir(data.get("raw_dir", "data/raw")),
         parquet_dir=_resolve_dir(data.get("parquet_dir", "data/parquet")),
+        # 用户数据与字典缓存（自选清单、股票名称），与可重建的 Parquet 分开
+        meta_dir=_resolve_dir(data.get("meta_dir", "data/meta")),
         timezone=timezone,
         log_level=str(app.get("log_level", "INFO")).upper(),
         cors_origins=cors_origins,

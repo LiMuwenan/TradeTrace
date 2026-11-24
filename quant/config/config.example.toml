@@ -8,6 +8,8 @@ port = 8000
 raw_dir = "data/raw"
 # 按年份分区的 Parquet：由原始数据派生的索引
 parquet_dir = "data/parquet"
+# 用户数据与字典缓存：自选清单、股票名称，不随 Parquet 重建而丢失
+meta_dir = "data/meta"
 
 [app]
 timezone = "Asia/Shanghai"

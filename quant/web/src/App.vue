@@ -1,11 +1,27 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { fetchDataStatus, fetchHealth } from './api/client'
+import {
+  addToWatchlist,
+  fetchDataStatus,
+  fetchHealth,
+  fetchWatchlist,
+  removeFromWatchlist,
+  searchStocks,
+} from './api/client'
 
 const health = ref(null)
 const status = ref(null)
 const error = ref('')
 const loading = ref(false)
+
+const watchlist = ref([])
+const watchlistLoading = ref(false)
+const watchlistError = ref('')
+const keyword = ref('')
+const searchResults = ref([])
+const searching = ref(false)
+const searched = ref(false)
+const namesAvailable = ref(true)
 
 const healthRows = computed(() => [
   { label: '后端版本', value: health.value?.version },
@@ -58,7 +74,82 @@ async function load() {
   loading.value = false
 }
 
-onMounted(load)
+async function loadWatchlist() {
+  watchlistLoading.value = true
+  watchlistError.value = ''
+  try {
+    const data = await fetchWatchlist()
+    watchlist.value = data.items
+  } catch (err) {
+    watchlist.value = []
+    watchlistError.value = err.message
+  } finally {
+    watchlistLoading.value = false
+  }
+}
+
+async function runSearch() {
+  const query = keyword.value.trim()
+  if (!query) {
+    searchResults.value = []
+    searched.value = false
+    return
+  }
+  searching.value = true
+  searched.value = false
+  watchlistError.value = ''
+  try {
+    const data = await searchStocks(query)
+    searchResults.value = data.items
+    namesAvailable.value = data.namesAvailable
+    searched.value = true
+  } catch (err) {
+    searchResults.value = []
+    watchlistError.value = err.message
+  } finally {
+    searching.value = false
+  }
+}
+
+async function addStock(code) {
+  watchlistError.value = ''
+  try {
+    await addToWatchlist(code)
+    searchResults.value = searchResults.value.filter((item) => item.code !== code)
+    await loadWatchlist()
+  } catch (err) {
+    watchlistError.value = err.message
+  }
+}
+
+async function removeStock(code) {
+  watchlistError.value = ''
+  try {
+    await removeFromWatchlist(code)
+    await loadWatchlist()
+  } catch (err) {
+    watchlistError.value = err.message
+  }
+}
+
+function priceText(value) {
+  return value == null ? '—' : value.toFixed(2)
+}
+
+function quoteText(item) {
+  if (item.pctChg == null) return '—'
+  return `${item.pctChg > 0 ? '+' : ''}${item.pctChg.toFixed(2)}%`
+}
+
+function quoteClass(item) {
+  if (item.suspended || item.pctChg == null || item.pctChg === 0) return 'flat'
+  return item.pctChg > 0 ? 'up' : 'down'
+}
+
+onMounted(() => {
+  load()
+  loadWatchlist()
+})
 </script>
 
 <template>
@@ -81,6 +172,59 @@ onMounted(load)
         <span class="label">{{ row.label }}</span>
         <span class="value" :class="{ mono: row.mono }">{{ row.value ?? '—' }}</span>
       </div>
+    </section>
+
+    <section class="card">
+      <h2 class="title">自选</h2>
+
+      <form class="search" @submit.prevent="runSearch">
+        <input
+          v-model="keyword"
+          type="search"
+          placeholder="输入代码或名称，如 600519 / 茅台"
+          aria-label="搜索标的"
+        />
+        <button type="submit" :disabled="searching || !keyword.trim()">
+          {{ searching ? '搜索中…' : '搜索' }}
+        </button>
+      </form>
+
+      <p v-if="!namesAvailable" class="hint">名称字典暂不可用，只能按代码搜索。</p>
+
+      <ul v-if="searchResults.length" class="results">
+        <li v-for="item in searchResults" :key="item.code">
+          <span class="code mono">{{ item.code }}</span>
+          <span class="stock-name">{{ item.name || '—' }}</span>
+          <button class="add" @click="addStock(item.code)">加入</button>
+        </li>
+      </ul>
+      <p v-else-if="searched && !searching" class="muted small">没有匹配的标的。</p>
+
+      <div v-if="watchlist.length" class="table">
+        <div class="table-head">
+          <span>代码</span>
+          <span>名称</span>
+          <span>最新交易日</span>
+          <span class="num">收盘价</span>
+          <span class="num">涨跌幅</span>
+          <span></span>
+        </div>
+        <div v-for="item in watchlist" :key="item.code" class="table-row">
+          <span class="code mono">{{ item.code }}</span>
+          <span>{{ item.name || '—' }}</span>
+          <span class="mono">{{ item.date || '—' }}</span>
+          <span class="num mono">{{ priceText(item.close) }}</span>
+          <span class="num mono" :class="quoteClass(item)">
+            {{ item.suspended ? '停牌' : quoteText(item) }}
+          </span>
+          <button class="remove" @click="removeStock(item.code)">移除</button>
+        </div>
+      </div>
+      <p v-else-if="!watchlistLoading" class="hint">
+        还没有自选标的。用上方搜索按代码或名称添加，例如 <code>600519</code> 或 <code>茅台</code>。
+      </p>
+
+      <p v-if="watchlistError" class="error">{{ watchlistError }}</p>
     </section>
 
     <section class="card">
@@ -276,6 +420,129 @@ onMounted(load)
 .retry:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.search {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search button,
+.add,
+.remove {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.search button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.results {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.results li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.results li:last-child {
+  border-bottom: none;
+}
+
+.results .code {
+  width: 84px;
+}
+
+.results .stock-name {
+  flex: 1;
+}
+
+.results .add {
+  padding: 4px 10px;
+}
+
+.table-head,
+.table-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 110px 84px 88px 60px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.table-head {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.num {
+  text-align: right;
+}
+
+.up {
+  color: var(--bad);
+}
+
+.down {
+  color: var(--ok);
+}
+
+.flat {
+  color: var(--muted);
+}
+
+.remove {
+  padding: 4px 10px;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.remove:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.small {
+  font-size: 13px;
 }
 
 .foot {

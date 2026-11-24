@@ -22,7 +22,7 @@ backend/app/storage/  Parquet 读写与分区
 backend/tests/        与 app 平行的测试
 web/src/api/          接口封装，页面不直接写 fetch
 config/               config.example.toml 入库，config.toml 不入库
-data/                 不入库：raw/ 原始 CSV 归档，parquet/ 按年分区
+data/                 不入库：raw/ 原始 CSV 归档，parquet/ 按年分区，meta/ 用户数据与字典缓存
 ```
 
 ## 数据布局
@@ -32,6 +32,8 @@ data/raw/daily/YYYY-MM-DD.csv     全市场日 K 横截面（18 列，UTF-8 BOM�
 data/raw/factors/YYYY-MM-DD.csv   当日除权清单（可为空，只有除权标的）
 data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_factor
 data/parquet/store_state.json     因子基准与最近一次导入结果
+data/meta/watchlist.json          自选清单（用户数据，不可从行情重建）
+data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单）
 ```
 
 所有入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开写路径。
