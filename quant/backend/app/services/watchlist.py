@@ -12,27 +12,27 @@ from zoneinfo import ZoneInfo
 from app.config import Settings
 from app.storage.parquet_store import ParquetStore
 from app.storage.schema import normalize_code
-from app.storage.stock_names import StockDirectory
+from app.storage.stock_names import StockNameCache
 from app.storage.watchlist_store import WatchlistEntry, load_watchlist, save_watchlist
 
 MAX_SEARCH_LIMIT = 200
 
 
-def list_watchlist(settings: Settings, directory: StockDirectory) -> list[dict]:
+def list_watchlist(settings: Settings, stock_names: StockNameCache) -> list[dict]:
     """按添加顺序返回自选及其最新行情。"""
     entries = load_watchlist(settings.meta_dir)
     quotes = ParquetStore(settings.parquet_dir).latest_bars([entry.code for entry in entries])
-    names = directory.names()
-    return [_present(entry, quotes.get(entry.code), names.get(entry.code) or entry.name) for entry in entries]
+    names = stock_names.names()
+    return [_to_item(entry, quotes.get(entry.code), names.get(entry.code) or entry.name) for entry in entries]
 
 
 def add_to_watchlist(
-    settings: Settings, directory: StockDirectory, raw_code: str
+    settings: Settings, stock_names: StockNameCache, raw_code: str
 ) -> tuple[dict, bool]:
     """加入自选；已存在时只刷新名称，返回 (条目, 是否新建)。"""
     code = normalize_code(raw_code)
     entries = load_watchlist(settings.meta_dir)
-    name = directory.ensure().get(code, "")
+    name = stock_names.ensure().get(code, "")
 
     existing = next((entry for entry in entries if entry.code == code), None)
     if existing is not None:
@@ -52,19 +52,19 @@ def add_to_watchlist(
     return _with_quote(settings, entry), True
 
 
-def remove_from_watchlist(settings: Settings, raw_code: str) -> bool:
-    """移除自选；本来就不在清单里时返回 False，不视为错误。"""
+def remove_from_watchlist(settings: Settings, raw_code: str) -> tuple[str, bool]:
+    """移除自选；返回 (归一化代码, 是否真的移除)，本来就不在清单里时视为未移除。"""
     code = normalize_code(raw_code)
     entries = load_watchlist(settings.meta_dir)
     remaining = [entry for entry in entries if entry.code != code]
     if len(remaining) == len(entries):
-        return False
+        return code, False
     save_watchlist(settings.meta_dir, remaining)
-    return True
+    return code, True
 
 
 def search_stocks(
-    settings: Settings, directory: StockDirectory, query: str, limit: int = 50
+    settings: Settings, stock_names: StockNameCache, query: str, limit: int = 50
 ) -> tuple[list[dict], bool]:
     """按代码或名称做子串搜索，返回 (结果, 名称字典是否可用)。
 
@@ -75,7 +75,7 @@ def search_stocks(
         return [], True
 
     capped = max(1, min(int(limit), MAX_SEARCH_LIMIT))
-    names = directory.ensure()
+    names = stock_names.ensure()
     available = bool(names)
     if not names:
         names = {code: "" for code in ParquetStore(settings.parquet_dir).codes()}
@@ -91,10 +91,10 @@ def search_stocks(
 
 def _with_quote(settings: Settings, entry: WatchlistEntry) -> dict:
     quote = ParquetStore(settings.parquet_dir).latest_bars([entry.code]).get(entry.code)
-    return _present(entry, quote, entry.name)
+    return _to_item(entry, quote, entry.name)
 
 
-def _present(entry: WatchlistEntry, quote: dict | None, name: str) -> dict:
+def _to_item(entry: WatchlistEntry, quote: dict | None, name: str) -> dict:
     return {
         "code": entry.code,
         "name": name,

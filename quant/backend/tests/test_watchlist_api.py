@@ -9,7 +9,7 @@ from app.factory import create_app
 from app.storage.ingest import Ingestor
 from app.storage.schema import IngestError
 from app.storage.sources import HistoricalCsvSource
-from app.storage.stock_names import StockDirectory
+from app.storage.stock_names import StockNameCache
 from factories import TRADE_DATE, bar, write_daily
 
 NAMES = {
@@ -33,8 +33,8 @@ class FakeProvider:
 
 
 def make_client(settings, provider: FakeProvider | None = None) -> TestClient:
-    directory = StockDirectory(settings.meta_dir, provider or FakeProvider())
-    return TestClient(create_app(settings, stock_directory=directory))
+    stock_names = StockNameCache(settings.meta_dir, provider or FakeProvider())
+    return TestClient(create_app(settings, stock_names=stock_names))
 
 
 def import_bars(settings, tmp_path, rows, trade_date: str = TRADE_DATE) -> None:
@@ -123,12 +123,30 @@ def test_remove_is_idempotent(local_settings, tmp_path):
     client = make_client(local_settings)
     client.post("/api/v1/watchlist", json={"code": "sh.600000"})
 
-    first = client.delete("/api/v1/watchlist/sh.600000").json()["data"]
+    # 输入用不带点的写法，响应里的 code 由 service 归一回传
+    first = client.delete("/api/v1/watchlist/sh600000").json()["data"]
     second = client.delete("/api/v1/watchlist/sh.600000").json()["data"]
 
     assert first == {"code": "sh.600000", "removed": True}
     assert second == {"code": "sh.600000", "removed": False}
     assert client.get("/api/v1/watchlist").json()["data"]["items"] == []
+
+
+def test_corrupt_watchlist_is_reported_and_not_overwritten(local_settings):
+    path = local_settings.meta_dir / "watchlist.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{ 不是合法 JSON", encoding="utf-8")
+    client = make_client(local_settings)
+
+    listed = client.get("/api/v1/watchlist")
+    added = client.post("/api/v1/watchlist", json={"code": "600000"})
+
+    assert listed.status_code == 500
+    assert listed.json()["code"] == 500
+    assert "自选文件" in listed.json()["message"]
+    assert added.status_code == 500
+    # 损坏文件必须原样保留，不能被空清单覆盖
+    assert path.read_text(encoding="utf-8") == "{ 不是合法 JSON"
 
 
 def test_add_rejects_invalid_code_with_unified_error(local_settings):
@@ -137,7 +155,7 @@ def test_add_rejects_invalid_code_with_unified_error(local_settings):
     assert response.status_code == 400
     body = response.json()
     assert body["code"] == 400
-    assert body["message"]
+    assert body["message"] == "标的代码格式应为 sh.600000 / sz.000001"
     assert "detail" not in body
 
 

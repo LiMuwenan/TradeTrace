@@ -7,9 +7,11 @@ from pydantic import BaseModel
 
 from app.schemas import ok
 from app.services import watchlist as watchlist_service
-from app.storage.schema import IngestError, normalize_code
+from app.storage.schema import IngestError
 
 router = APIRouter(tags=["watchlist"])
+
+CODE_FORMAT_MESSAGE = "标的代码格式应为 sh.600000 / sz.000001"
 
 
 class WatchlistAdd(BaseModel):
@@ -19,7 +21,7 @@ class WatchlistAdd(BaseModel):
 @router.get("/watchlist")
 def get_watchlist(request: Request) -> dict:
     items = watchlist_service.list_watchlist(
-        request.app.state.settings, request.app.state.stock_directory
+        request.app.state.settings, request.app.state.stock_names
     )
     return ok({"items": items, "count": len(items)})
 
@@ -28,28 +30,27 @@ def get_watchlist(request: Request) -> dict:
 def post_watchlist(request: Request, payload: WatchlistAdd) -> dict:
     try:
         item, created = watchlist_service.add_to_watchlist(
-            request.app.state.settings, request.app.state.stock_directory, payload.code
+            request.app.state.settings, request.app.state.stock_names, payload.code
         )
     except IngestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=CODE_FORMAT_MESSAGE) from exc
     return ok({"item": item, "created": created})
 
 
 @router.delete("/watchlist/{code}")
 def delete_watchlist(request: Request, code: str) -> dict:
     try:
-        normalized = normalize_code(code)
-        removed = watchlist_service.remove_from_watchlist(
+        normalized, removed = watchlist_service.remove_from_watchlist(
             request.app.state.settings, code
         )
     except IngestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=CODE_FORMAT_MESSAGE) from exc
     return ok({"code": normalized, "removed": removed})
 
 
 @router.get("/stocks/search")
 def stock_search(request: Request, q: str = "", limit: int = 50) -> dict:
     items, names_available = watchlist_service.search_stocks(
-        request.app.state.settings, request.app.state.stock_directory, q, limit
+        request.app.state.settings, request.app.state.stock_names, q, limit
     )
     return ok({"items": items, "count": len(items), "namesAvailable": names_available})

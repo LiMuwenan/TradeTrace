@@ -14,6 +14,13 @@ from pathlib import Path
 WATCHLIST_FILENAME = "watchlist.json"
 
 
+class WatchlistCorruptError(Exception):
+    """自选文件存在但无法读取或解析。
+
+    保留原文件并显式报错，避免用空清单覆盖用户数据。
+    """
+
+
 @dataclass(frozen=True)
 class WatchlistEntry:
     code: str
@@ -30,13 +37,20 @@ def load_watchlist(meta_dir: Path | str) -> list[WatchlistEntry]:
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        # 自选损坏时按空处理，不阻断服务启动；下次写入会覆盖成合法结构
-        return []
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WatchlistCorruptError(f"自选文件损坏或不可读：{path}") from exc
+
+    if not isinstance(raw, dict):
+        raise WatchlistCorruptError(f"自选文件结构不合法：{path}")
+    items = raw.get("items") or []
+    if not isinstance(items, list):
+        raise WatchlistCorruptError(f"自选文件结构不合法：{path}")
 
     entries: list[WatchlistEntry] = []
     seen: set[str] = set()
-    for item in raw.get("items") or []:
+    for item in items:
+        if not isinstance(item, dict):
+            raise WatchlistCorruptError(f"自选文件结构不合法：{path}")
         code = str(item.get("code") or "").strip()
         if not code or code in seen:
             continue

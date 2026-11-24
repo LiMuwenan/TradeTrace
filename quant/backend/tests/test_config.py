@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """配置加载的行为：路径解析、缺失报错、非法值拒绝。"""
+from dataclasses import replace
+
 import pytest
 
 from app.config import PROJECT_ROOT, load_settings, resolve_config_path
+from app.factory import create_app
 from tests.conftest import MINIMAL_CONFIG
 
 
@@ -65,3 +68,12 @@ def test_env_var_selects_config_file(config_path, monkeypatch):
 
     assert resolve_config_path() == config_path.resolve()
     assert load_settings().config_path == config_path.resolve()
+
+
+def test_startup_rejects_unwritable_data_dir(local_settings, tmp_path):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("", encoding="utf-8")
+    broken = replace(local_settings, raw_dir=blocker / "raw")
+
+    with pytest.raises(RuntimeError, match="raw_dir"):
+        create_app(broken)

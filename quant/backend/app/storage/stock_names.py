@@ -69,7 +69,7 @@ class BaostockNameProvider:
         return names
 
 
-class StockDirectory:
+class StockNameCache:
     """带磁盘缓存的名称字典。缓存只由本类读写。"""
 
     def __init__(self, meta_dir: Path | str, provider: NameProvider | None = None) -> None:
