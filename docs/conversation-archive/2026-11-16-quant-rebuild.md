@@ -221,3 +221,14 @@
 - **[决策·已定]** 保留「独立窗口 + 关窗即停」与「启动前检查 venv / node_modules」的行为；就绪检测用 `netstat` 轮询端口，最多 20 秒。
 
 > 依据：用户「改成bat脚本」；Agent「UTF-8 无 BOM，符合 cmd 要求」。
+
+## 2026-11-24（启动脚本改为 Git Bash 的 sh）
+
+- **[变更]** 启动脚本由 bat 改为 `quant/scripts/start-dev.sh`，删除 bat；用户在 Windows 上用 Git Bash 执行。提交 `1471699`。
+- **[偏好]** 用户在 Windows 上使用 **Git Bash** 执行开发脚本，不依赖 cmd 或 PowerShell。
+- **[决策·已定]** 不再各开独立窗口：两个服务在同一终端后台运行并输出日志，Ctrl+C 触发 trap 同时停止两者。
+- **[约束]** 仓库根新增 `.gitattributes` 固定 `*.sh text eol=lf`：本机 `core.autocrlf=true`，否则 sh 被检出为 CRLF 后 Git Bash 无法执行。
+- **[决策·已定]** 停止进程用 `taskkill //F //T //PID $(cat /proc/<pid>/winpid)`，因为只杀 npm 会留下占用 5173 的 node 子进程；端口就绪探测用 bash `/dev/tcp`，不依赖 curl/netstat。
+- **[事实·已验证]** 在本机 Git Bash（bash 5.3，Cygwin）下 `/dev/tcp` 探测与 `/proc/<pid>/winpid` 均可用，`npm` 解析为 Git Bash 的 shell shim。
+
+> 依据：用户「你改成shell脚本，我将在windows电脑上使用git bash执行」；Agent「npm=/d/Program/node-v26.13.1-win-x64/npm」「winpid=17976」「8000 未监听（探测可用）」。
