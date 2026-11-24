@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from app.config import Settings
 from app.storage.parquet_store import ParquetStore
-from app.storage.schema import normalize_code
+from app.storage.schema import IngestError, normalize_code
 from app.storage.stock_names import StockNameCache
 from app.storage.watchlist_store import WatchlistEntry, load_watchlist, save_watchlist
 
@@ -72,7 +72,8 @@ def search_stocks(
     """
     text = (query or "").strip()
     if not text:
-        return [], True
+        # 空查询不刷新名称字典，只报告磁盘缓存的真实可用性
+        return [], bool(stock_names.names())
 
     capped = max(1, min(int(limit), MAX_SEARCH_LIMIT))
     names = stock_names.ensure()
@@ -81,10 +82,15 @@ def search_stocks(
         names = {code: "" for code in ParquetStore(settings.parquet_dir).codes()}
 
     needle = text.lower()
+    # 与加入接口保持一致：sh600000 / 600000.SH 这类写法先归一，再按代码精确匹配
+    try:
+        exact = normalize_code(text)
+    except IngestError:
+        exact = None
     items = [
         {"code": code, "name": name}
         for code, name in sorted(names.items())
-        if needle in code.lower() or needle in name.lower()
+        if code == exact or needle in code.lower() or needle in name.lower()
     ][:capped]
     return items, available
 

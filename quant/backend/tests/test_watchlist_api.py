@@ -173,11 +173,28 @@ def test_search_matches_code_and_name_without_duplicate_refresh(local_settings):
     assert provider.calls == 1  # 第二次搜索命中磁盘缓存，不再拉取
 
 
-def test_search_empty_query_returns_empty(local_settings):
-    data = make_client(local_settings).get("/api/v1/stocks/search", params={"q": "   "}).json()["data"]
+def test_search_accepts_the_same_code_formats_as_add(local_settings):
+    client = make_client(local_settings)
 
-    assert data["items"] == []
-    assert data["count"] == 0
+    for query in ("sh600000", "600000.SH", "600000"):
+        data = client.get("/api/v1/stocks/search", params={"q": query}).json()["data"]
+        assert [item["code"] for item in data["items"]] == ["sh.600000"]
+
+
+def test_search_empty_query_reports_cached_names_without_refresh(local_settings):
+    provider = FakeProvider()
+    client = make_client(local_settings, provider)
+
+    empty = client.get("/api/v1/stocks/search", params={"q": "   "}).json()["data"]
+    assert empty["items"] == []
+    assert empty["count"] == 0
+    assert empty["namesAvailable"] is False  # 尚未刷新，磁盘上没有缓存
+    assert provider.calls == 0  # 空查询不触发联网刷新
+
+    client.get("/api/v1/stocks/search", params={"q": "贵州"})
+    refreshed = client.get("/api/v1/stocks/search", params={"q": ""}).json()["data"]
+    assert refreshed["namesAvailable"] is True
+    assert provider.calls == 1
 
 
 def test_search_falls_back_to_stored_codes_without_names(local_settings, tmp_path):
