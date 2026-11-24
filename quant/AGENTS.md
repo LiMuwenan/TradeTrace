@@ -36,8 +36,9 @@ data/meta/watchlist.json          自选清单（用户数据，不可从行情�
 data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单）
 ```
 
-所有入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开写路径。
+所有**行情数据**入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开行情写路径。
 实时抓取到的数据同样先归档成上面两份 CSV，再走同一条导入路径。
+`data/meta/` 下的用户数据与字典缓存不属于行情数据，由各自的 store 原子写入。
 
 ## 边界
 
