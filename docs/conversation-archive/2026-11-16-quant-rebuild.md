@@ -244,3 +244,13 @@
 - **[风险]** 名称字典依赖 baostock 网络；离线或未安装 baostock 时名称不可用，仅能按代码搜索与添加。
 
 > 依据：用户「Use Skill: zh-implement」；ticket 03「可按代码或名称搜索标的并加入自选」「涨跌幅直接使用数据源的涨跌幅字段」「自选数据持久化，服务重启后仍存在」；Agent「自选是用户数据，不能像 Parquet 那样从原始 CSV 重建」「名称字典不可用时退回只按代码搜索」。
+
+## 2026-11-24（Ticket 03 双轴代码审查）
+
+- **[开放问题]** `data/meta/` 下 `watchlist.json` 与 `stock_names.json` 的写入是否算违反「所有入库必须经过 `Ingestor`」；`quant/AGENTS.md` 未豁免用户数据，字面冲突，待用户拍板。
+- **[风险]** `load_watchlist` 解析失败时静默返回空清单，下次写入会覆盖损坏文件，存在自选数据无提示丢失的风险；与「不做静默兜底」相悖。
+- **[风险]** `StockDirectory.ensure()` 只捕获 `IngestError`；baostock 抛出的其它异常会冒到接口成为 500，与 docstring「刷新失败退回旧缓存」不符。
+- **[待办]** 审查提出但未修：搜索不支持 `sh600000` / `600000.SH` 写法；空查询返回 `namesAvailable=true` 与字典实际可用性无关；停牌仅在前端显示「停牌」，后端仍返回 `pctChg=0`；名称字典未排除 B 股等非 A 股代码段；未入库标的加入自选后五列行情全空且无「尚无本地数据」提示。
+- **[事实·已验证]** 涨跌幅取源字段、重复加入幂等且保持顺序、空态引导、原子写、响应 `{code,message,data}` + camelCase 均通过审查。
+
+> 依据：用户「Use Skill: zh-code-review」；Standards 子代理「唯一需拍板的是 meta 文件写入是否算另开写路径」；Spec 子代理「自选文件损坏时静默清空并可被覆盖」。
