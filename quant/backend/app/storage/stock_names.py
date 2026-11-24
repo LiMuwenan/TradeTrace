@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +17,8 @@ from app.storage.schema import IngestError, normalize_code
 
 CACHE_FILENAME = "stock_names.json"
 CACHE_TTL = timedelta(days=1)
+
+logger = logging.getLogger(__name__)
 
 
 class NameProvider(Protocol):
@@ -87,7 +90,8 @@ class StockDirectory:
             return cached[0] if cached else {}
         try:
             return self.refresh()
-        except IngestError:
+        except Exception as exc:  # 名称字典是尽力而为的外部依赖，失败不应阻断自选与搜索
+            logger.warning("股票名称字典刷新失败，沿用旧缓存：%s", exc)
             return cached[0] if cached else {}
 
     def refresh(self) -> dict[str, str]:

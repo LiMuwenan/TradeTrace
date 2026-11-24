@@ -172,6 +172,29 @@ def test_search_falls_back_to_stored_codes_without_names(local_settings, tmp_pat
     assert data["items"] == [{"code": "sh.600000", "name": ""}]
 
 
+def test_search_survives_unexpected_refresh_error(local_settings, tmp_path):
+    import_bars(local_settings, tmp_path, [bar(TRADE_DATE, "sh.600000", 10.5)])
+    client = make_client(local_settings, FakeProvider(error=RuntimeError("socket 未初始化")))
+
+    data = client.get("/api/v1/stocks/search", params={"q": "600000"}).json()["data"]
+
+    assert data["namesAvailable"] is False
+    assert data["items"] == [{"code": "sh.600000", "name": ""}]
+
+
+def test_add_survives_unexpected_refresh_error(local_settings, tmp_path):
+    import_bars(local_settings, tmp_path, [bar(TRADE_DATE, "sh.600000", 10.5)])
+    client = make_client(local_settings, FakeProvider(error=RuntimeError("socket 未初始化")))
+
+    response = client.post("/api/v1/watchlist", json={"code": "600000"})
+
+    assert response.status_code == 200
+    item = response.json()["data"]["item"]
+    assert item["code"] == "sh.600000"
+    assert item["name"] == ""
+    assert item["close"] == 10.5
+
+
 def test_search_result_can_be_added(local_settings, tmp_path):
     import_bars(local_settings, tmp_path, [bar(TRADE_DATE, "sh.600519", 1500.0)])
     client = make_client(local_settings)
