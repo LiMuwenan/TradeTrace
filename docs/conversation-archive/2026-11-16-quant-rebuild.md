@@ -289,3 +289,12 @@
 - **[开放问题]** `StockDirectory`（实为名称缓存）、`ensure()`、`_present` 命名是否调整待决策。
 
 > 依据：用户「判断项：watchlist_store.py 在 JSON 损坏时静默返回空清单……做详细解释，解释完我看过后再决策如何修改」；Agent「损坏只会在下一次 `POST /watchlist` 落盘时被覆盖，删除不会触发写盘」。
+
+## 2026-11-24（四项审查判断项决策与实施）
+
+- **[决策·已定]** 自选文件损坏改为显式报错：新增 `WatchlistCorruptError`，仅「文件不存在」返回空清单，解析失败或结构非法抛错；`create_app` 注册 handler 映射 500 并保留原文件，不再用空清单覆盖用户数据。提交 `6d2b67f`。
+- **[决策·已定]** 启动时在 `create_app` 对 `raw_dir` / `parquet_dir` / `meta_dir` 统一探测可写（`mkdir` + 写临时探针文件后删除），失败抛 `RuntimeError` 并指出目录。代价：`create_app` 带建目录副作用。
+- **[决策·已定]** 错误文案在 API 层固定为「标的代码格式应为 sh.600000 / sz.000001」，不再用 `str(exc)` 透出存储层消息；`remove_from_watchlist` 改为返回 `(归一化代码, removed)`，删除接口不再重复归一。
+- **[决策·已定]** 命名调整：`StockDirectory` → `StockNameCache`，`app.state.stock_directory` → `app.state.stock_names`，`create_app(stock_names=...)`；`_present` → `_to_item`；`ensure()` 保留原名。验证：`pytest -q` 48 passed。
+
+> 依据：用户「1:按推荐 2：启动时探测 3a：固定文案 3b：按推荐改 4：按推荐」；Agent「自选文件损坏或不可读：<path>」「启动时验证数据目录可写，避免问题拖到首次写入才暴露」。
