@@ -232,3 +232,15 @@
 - **[事实·已验证]** 在本机 Git Bash（bash 5.3，Cygwin）下 `/dev/tcp` 探测与 `/proc/<pid>/winpid` 均可用，`npm` 解析为 Git Bash 的 shell shim。
 
 > 依据：用户「你改成shell脚本，我将在windows电脑上使用git bash执行」；Agent「npm=/d/Program/node-v26.13.1-win-x64/npm」「winpid=17976」「8000 未监听（探测可用）」。
+
+## 2026-11-24（Ticket 03 自选管理实现）
+
+- **[决策·已定]** 自选清单与名称字典存放 `data/meta/`（新增配置 `data.meta_dir`，默认 `data/meta`），与可重建的 Parquet 分开。理由：自选是用户数据，不能从原始 CSV 重建；代价：多一个配置项与目录。
+- **[决策·已定]** 股票名称来源为 baostock `query_stock_basic` 全市场证券清单（只保留 type=1 股票、status=1 上市），缓存到 `data/meta/stock_names.json`，TTL 1 天；仅在搜索时缓存缺失或过期才刷新。
+- **[决策·已定]** 名称刷新失败时退回「只按代码搜索」已入库标的，搜索响应 `namesAvailable=false`，不阻断自选增删；代价：失败期间名称显示为空（前端显示「—」）。
+- **[决策·已定]** 自选列表涨跌幅直接取数据源 `pctChg`，不由 `close/preclose` 反算；停牌由后端返回 `suspended` 标记，前端显示「停牌」，不改写源数值。
+- **[契约]** 新增 `GET /api/v1/watchlist`、`POST /api/v1/watchlist`、`DELETE /api/v1/watchlist/{code}`、`GET /api/v1/stocks/search?q&limit`；自选条目为 `code/name/addedAt/date/close/pctChg/suspended`；搜索返回 `items/count/namesAvailable`；重复加入返回 `created=false`，删除不存在返回 `removed=false`，均不报错。
+- **[产物]** Ticket 03 完成并提交 `c9222b5`；后端 44 个测试通过，前端 `npm run build` 通过；用真实 Parquet 冒烟验证 `sh.600000` 最新交易日 2026-06-15、收盘 9.53、`pctChg` -1.4478。
+- **[风险]** 名称字典依赖 baostock 网络；离线或未安装 baostock 时名称不可用，仅能按代码搜索与添加。
+
+> 依据：用户「Use Skill: zh-implement」；ticket 03「可按代码或名称搜索标的并加入自选」「涨跌幅直接使用数据源的涨跌幅字段」「自选数据持久化，服务重启后仍存在」；Agent「自选是用户数据，不能像 Parquet 那样从原始 CSV 重建」「名称字典不可用时退回只按代码搜索」。
