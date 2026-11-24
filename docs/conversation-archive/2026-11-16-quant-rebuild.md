@@ -254,3 +254,10 @@
 - **[事实·已验证]** 涨跌幅取源字段、重复加入幂等且保持顺序、空态引导、原子写、响应 `{code,message,data}` + camelCase 均通过审查。
 
 > 依据：用户「Use Skill: zh-code-review」；Standards 子代理「唯一需拍板的是 meta 文件写入是否算另开写路径」；Spec 子代理「自选文件损坏时静默清空并可被覆盖」。
+
+## 2026-11-24（Ingestor 边界澄清）
+
+- **[纠正]** `quant/AGENTS.md` 的「所有入库都必须经过 `Ingestor`」中的「入库」指**行情数据**入库（原始 CSV → Parquet），不是所有文件落盘；`data/meta/` 下的自选清单与名称字典不属于行情数据，由各自的 store 原子写入。
+- **[开放问题]** `quant/AGENTS.md:39` 的措辞未限定范围，是否改为「所有**行情数据**入库都必须经过 `Ingestor`……」待用户确认；仅文档改动，不影响代码。
+
+> 依据：用户「这个你再解释一下，Ingestor 是什么」；Agent「Ingestor 的输入契约是 `DaySnapshot`……自选是代码列表、名称是字典，没有日期/OHLC/因子，塞进 Ingestor 属于错误抽象」。
