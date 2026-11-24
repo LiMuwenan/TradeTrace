@@ -213,3 +213,11 @@
 - **[开放问题]** 脚本端口硬编码为 8000/5173（与 `config/config.toml`、`vite.config.js` 一致），改配置后需同步修改脚本。
 
 > 依据：用户「编写一个启动前后端的脚本」；Agent「两个服务各在一个独立窗口运行，关闭窗口即停止对应服务」「含中文的 .ps1 必须存为 UTF-8 带 BOM」。
+
+## 2026-11-24（启动脚本改为 bat）
+
+- **[变更]** 启动脚本形式由 `start-dev.ps1` 改为 `quant/scripts/start-dev.bat`，删除 ps1；执行方式变为双击或 `quant\scripts\start-dev.bat`。原因：用户要求。
+- **[约束]** 含中文的 `.bat` 必须存为 UTF-8 **无 BOM**，并在首行后 `chcp 65001`；带 BOM 会让 cmd 把首行读成非法命令。
+- **[决策·已定]** 保留「独立窗口 + 关窗即停」与「启动前检查 venv / node_modules」的行为；就绪检测用 `netstat` 轮询端口，最多 20 秒。
+
+> 依据：用户「改成bat脚本」；Agent「UTF-8 无 BOM，符合 cmd 要求」。
