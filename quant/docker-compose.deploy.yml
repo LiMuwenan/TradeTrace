@@ -9,6 +9,11 @@
 #   PowerShell： $env:TAG="sha-6f59ab2"; docker compose -f docker-compose.deploy.yml up -d
 #
 # 宿主机路径用正斜杠；中文路径可以直接写。私有镜像先 docker login ghcr.io。
+# Linux 服务器示例（建议独立子目录，别和 lianghua 的 raw / meta.db 混放）：
+#   RAW_DIR_HOST=/home/ligen/lianghua/data/quant/raw
+#   PARQUET_DIR_HOST=/home/ligen/lianghua/data/quant/parquet
+#   META_DIR_HOST=/home/ligen/lianghua/data/quant/meta
+# 容器内是 uid 10001，宿主机目录先 `chown -R 10001:10001`，或按文件末尾注释用 APP_UID 对齐。
 # 不要挂载本地 config.toml：里面的 G:\ 绝对路径在容器里不存在，
 # 容器内的目录一律由下面三个 * _DIR_HOST 决定。
 
@@ -37,3 +42,5 @@ services:
     # Windows 的 bind mount 一般可直接写；若启动报「xxx 不可写」，
     # 先确认 Docker Desktop 已共享该盘符，仍不行再临时打开下面这行（不推荐常开）。
     # user: "0:0"
+    # Linux 不想 chown 给 10001 时，用当前用户跑：APP_UID=$(id -u) APP_GID=$(id -g) 启动
+    # user: "${APP_UID:-10001}:${APP_GID:-10001}"
