@@ -8,11 +8,15 @@
 """
 from __future__ import annotations
 
+import logging
+
 from app.config import Settings
 from app.services import rule_eval
 from app.storage import rule_store
 from app.storage.meta_db import Rule, RuleValidationError, connect, now_iso
 from app.storage.watchlist_store import load_watchlist
+
+logger = logging.getLogger(__name__)
 
 RULE_TYPE_LABELS = {
     "breakout": "突破",
@@ -58,8 +62,9 @@ def create_rule(
 ) -> dict:
     """新建规则：先建为停用态，回放补齐历史状态后才启用。
 
-    回放失败时规则留在停用态（不会参与求值），用户可在列表里重试启用——
-    这比「建好了但状态错的规则在跑」安全得多。
+    回放失败时规则留在停用态（不会参与求值），失败原因放进返回值的 `replay.error`，
+    用户可在列表里重试启用——这比「建好了但状态错的规则在跑」安全得多。此时接口仍返回
+    201 并带上规则 id：抛错会让用户以为没建成，再点一次就多出一条重复规则。
     """
     conn = connect(settings.meta_dir, settings.timezone)
     try:
@@ -77,7 +82,9 @@ def create_rule(
     finally:
         conn.close()
 
-    replay = rule_eval.replay_rule(settings, rule.id)
+    replay = _replay(settings, rule.id)
+    if "error" in replay:
+        return {**_to_item(rule, _watchlist(settings), None), "replay": replay}
     enabled = _enable(settings, rule.id)
     return {**_to_item(enabled, _watchlist(settings), None), "replay": replay}
 
@@ -156,9 +163,25 @@ def set_enabled(settings: Settings, rule_id: int, enabled: bool) -> dict:
         }
 
     # 启用：先补历史（停用期间可能本该触发），再把规则放回求值范围
-    replay = rule_eval.replay_rule(settings, rule_id, until=now_iso(settings.timezone)[:10])
+    replay = _replay(settings, rule_id, until=now_iso(settings.timezone)[:10])
+    if "error" in replay:
+        # 回放没成功就不启用：状态还停在停用时的收尾上，放回求值范围会炸出假预警
+        return {"rule": existing.as_dict(), "changed": False, "replay": replay}
     rule = _enable(settings, rule_id)
     return {"rule": rule.as_dict(), "changed": True, "replay": replay}
+
+
+def _replay(settings: Settings, rule_id: int, *, until: str | None = None) -> dict:
+    """静默回放；失败不抛出，把原因放进返回值。
+
+    回放要读全历史行情，目录不可读、数据缺列都可能炸。此时规则已经入库，抛错只会
+    让用户以为写入失败并重试建出一条重复规则；留在停用态等用户重试才是安全的失败方式。
+    """
+    try:
+        return rule_eval.replay_rule(settings, rule_id, until=until)
+    except Exception as exc:  # noqa: BLE001 - 任何回放失败都要降级成「停用态 + 原因」
+        logger.warning("规则 %s 回放失败：%s", rule_id, exc)
+        return {"error": str(exc) or exc.__class__.__name__}
 
 
 def _enable(settings: Settings, rule_id: int) -> Rule:

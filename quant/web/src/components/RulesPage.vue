@@ -119,12 +119,13 @@ async function submit() {
   try {
     const window = Number(form.window)
     const threshold = needsThreshold.value ? Number(form.threshold) : null
+    let data = null
     if (isEditing.value) {
       await updateRule(editing.value, { name: form.name.trim(), window, threshold })
     } else {
       // 新建会先做静默回放，按钮上的提示要让用户知道这一下会等几秒
       busyText.value = '正在按历史数据计算触发状态，请稍候…'
-      await createRule({
+      data = await createRule({
         type: form.type,
         name: form.name.trim(),
         scope: form.scope,
@@ -135,6 +136,10 @@ async function submit() {
     }
     closeForm()
     await load()
+    // 回放失败时规则已建好但仍是停用态，得把原因说出来，不能让用户以为已经生效
+    if (data?.replay?.error) {
+      error.value = `规则已保存但未启用：${data.replay.error}。可在列表里重试启用。`
+    }
   } catch (err) {
     formError.value = err.message
   } finally {
@@ -148,8 +153,11 @@ async function toggle(rule) {
   busyText.value = rule.enabled ? '正在收尾当前触发状态…' : '正在回放历史状态，请稍候…'
   error.value = ''
   try {
-    await setRuleEnabled(rule.id, !rule.enabled)
+    const data = await setRuleEnabled(rule.id, !rule.enabled)
     await load()
+    if (data?.replay?.error) {
+      error.value = `未能启用：${data.replay.error}。规则仍为停用态，可稍后重试。`
+    }
   } catch (err) {
     error.value = err.message
   } finally {

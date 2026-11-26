@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.factory import create_app
+from app.services import rule_eval
 from app.storage import meta_db, rule_store
 from app.storage.ingest import Ingestor
 from app.storage.sources import HistoricalCsvSource
@@ -250,6 +251,40 @@ def test_enable_after_disable_replays_gap(local_settings, tmp_path):
 
     assert data["rule"]["enabled"] is True
     assert data["replay"] is not None
+
+
+def replay_boom(*args, **kwargs):
+    raise RuntimeError("行情目录不可读")
+
+
+def test_create_keeps_rule_disabled_when_replay_fails(local_settings, tmp_path, monkeypatch):
+    """回放炸了也要把规则留在列表里（停用态）。
+
+    抛 500 会让用户以为没建成，再点一次「创建并启用」就多出一条重复规则。
+    """
+    seed_market(local_settings, tmp_path, [10, 10, 10, 12])
+    monkeypatch.setattr(rule_eval, "replay_rule", replay_boom)
+
+    data = create(make_client(local_settings))
+
+    assert data["enabled"] is False
+    assert data["replay"]["error"] == "行情目录不可读"
+    rows = rows_of(local_settings, "SELECT * FROM alert_rule")
+    assert len(rows) == 1 and int(rows[0]["enabled"]) == 0
+
+
+def test_enable_keeps_rule_disabled_when_replay_fails(local_settings, tmp_path, monkeypatch):
+    client = make_client(local_settings)
+    seed_market(local_settings, tmp_path, [10, 10, 10, 12])
+    rule = create(client)
+    client.post(f"/api/v1/rules/{rule['id']}/enabled", json={"enabled": False})
+    monkeypatch.setattr(rule_eval, "replay_rule", replay_boom)
+
+    data = client.post(f"/api/v1/rules/{rule['id']}/enabled", json={"enabled": True}).json()["data"]
+
+    assert data["changed"] is False
+    assert data["rule"]["enabled"] is False
+    assert data["replay"]["error"] == "行情目录不可读"
 
 
 def test_list_shows_last_trigger_and_counts(local_settings, tmp_path):
