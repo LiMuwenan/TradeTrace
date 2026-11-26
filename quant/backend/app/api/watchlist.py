@@ -46,11 +46,3 @@ def delete_watchlist(request: Request, code: str) -> dict:
     except IngestError as exc:
         raise HTTPException(status_code=400, detail=CODE_FORMAT_MESSAGE) from exc
     return ok({"code": normalized, "removed": removed})
-
-
-@router.get("/stocks/search")
-def stock_search(request: Request, q: str = "", limit: int = 50) -> dict:
-    items, names_available = watchlist_service.search_stocks(
-        request.app.state.settings, request.app.state.stock_names, q, limit
-    )
-    return ok({"items": items, "count": len(items), "namesAvailable": names_available})

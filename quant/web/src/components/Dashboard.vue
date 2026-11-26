@@ -387,8 +387,8 @@ onMounted(() => {
                   :key="item.code"
                   class="grid grid-cols-[110px_1fr_110px_100px_100px_64px] items-center gap-2 border-b px-3 py-2.5 text-sm last:border-b-0"
                 >
-                  <span class="font-mono text-xs">{{ item.code }}</span>
-                  <span class="truncate">{{ item.name || '—' }}</span>
+                  <button class="text-left font-mono text-xs text-primary hover:underline" @click="router.push(`/stocks/${item.code}`)">{{ item.code }}</button>
+                  <button class="truncate text-left hover:underline" @click="router.push(`/stocks/${item.code}`)">{{ item.name || '—' }}</button>
                   <span class="font-mono text-xs text-muted-foreground">{{ item.date || '—' }}</span>
                   <span class="text-right font-mono">{{ priceText(item.close) }}</span>
                   <span class="text-right font-mono font-medium" :class="quoteClass(item)">

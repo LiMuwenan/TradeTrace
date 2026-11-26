@@ -39,7 +39,9 @@ const activePath = computed(() => {
 })
 
 const PAGE_TITLES = { '/alerts': '预警', '/rules': '规则', '/settings/notification': '通知设置' }
-const pageTitle = computed(() => PAGE_TITLES[activePath.value] || '控制台')
+const pageTitle = computed(() =>
+  route.path.startsWith('/stocks') ? '个股详情' : PAGE_TITLES[activePath.value] || '控制台'
+)
 </script>
 
 <template>

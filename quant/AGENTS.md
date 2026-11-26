@@ -9,13 +9,13 @@ A 股量化数据分析与预警平台。**只读行情，不接交易**：不�
 ## 技术栈
 
 - 后端：Python 3.11+、FastAPI、uvicorn；配置用 TOML + 标准库 `tomllib`
-- 前端：Vue 3 + Vite 6；Tailwind CSS 3 + shadcn 风格组件栈（`class-variance-authority`、`clsx`、`tailwind-merge`、`lucide-vue-next`、`reka-ui`）
+- 前端：Vue 3 + Vite 6；Tailwind CSS 3 + shadcn 风格组件栈（`class-variance-authority`、`clsx`、`tailwind-merge`、`lucide-vue-next`、`reka-ui`）；图表用 `echarts`，只在个股详情页按需加载（路由懒加载，不进首屏包）
 - 移动端（后续）：Expo/RN
-- 查询层：DuckDB 直读 Parquet（不引入独立数据库服务）
+- 查询层：DuckDB 直读 Parquet（不引入独立数据库服务）；用户记录落 `meta.db`（SQLite，标准库 `sqlite3`），两者职责不同
 
 ## Web 页面风格
 
-Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、预警列表、预警详情、通知设置四页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
+Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、个股详情、预警列表、预警详情、通知设置五页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/stocks/:code`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
 
 > **2026-11-26 变更**：原约定为「由 `App.vue` 的 `view` 状态切换，不引入 vue-router」。改为路由的原因是预警详情必须能刷新保持、能直接开链接，`ref` 切视图做不到这两点（见 `.scratch/quant-p0/07-alert-list.md`）。视觉与结构约定不变，新增页面仍需沿用控制台的左侧分组侧栏 + 顶栏结构（预警三页通过 `web/src/components/AppShell.vue` 复用）。
 

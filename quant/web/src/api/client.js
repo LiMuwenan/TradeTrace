@@ -62,6 +62,11 @@ export function searchStocks(keyword) {
   return request(`/stocks/search?q=${encodeURIComponent(keyword)}`)
 }
 
+/** 个股详情：日 K 与均线，`range` 为 3m / 1y / all（04 号票）。 */
+export function fetchStockDetail(code, range = '1y') {
+  return request(`/stocks/${encodeURIComponent(code)}/detail?range=${encodeURIComponent(range)}`)
+}
+
 // --- 预警（07 号票）-------------------------------------------------------
 
 export function fetchAlerts({ read, code, ruleType, page = 1, pageSize = 20 } = {}) {

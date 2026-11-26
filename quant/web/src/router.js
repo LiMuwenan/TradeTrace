@@ -6,6 +6,9 @@ import AlertDetailPage from './components/AlertDetailPage.vue'
 import NotificationSettingsPage from './components/NotificationSettingsPage.vue'
 import RulesPage from './components/RulesPage.vue'
 
+// 图表库体积大，详情页按需加载，不拖慢首屏
+const StockDetailPage = () => import('./components/StockDetailPage.vue')
+
 /**
  * 路由而不是 ref 切 view：预警详情需要能刷新保持、能直接开链接（07 票备注）。
  */
@@ -15,6 +18,7 @@ const routes = [
   { path: '/alerts', name: 'alerts', component: AlertsPage },
   { path: '/alerts/:id(\\d+)', name: 'alert-detail', component: AlertDetailPage, props: true },
   { path: '/rules', name: 'rules', component: RulesPage },
+  { path: '/stocks/:code', name: 'stock-detail', component: StockDetailPage, props: true },
   { path: '/settings/notification', name: 'notification-settings', component: NotificationSettingsPage },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
