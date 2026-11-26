@@ -1,10 +1,12 @@
 [server]
 # 局域网内其他设备（手机、另一台电脑）要访问时改为 "0.0.0.0"
+# 容器部署可用环境变量覆盖：QUANT_HOST / QUANT_PORT
 host = "127.0.0.1"
 port = 8000
 
 [data]
 # 原始 CSV 归档：不可变的事实源，任何时候都能据此重建 Parquet
+# 以下三项也可用环境变量覆盖：QUANT_RAW_DIR / QUANT_PARQUET_DIR / QUANT_META_DIR
 raw_dir = "data/raw"
 # 按年份分区的 Parquet：由原始数据派生的索引
 parquet_dir = "data/parquet"
@@ -24,4 +26,4 @@ cors_origins = [
 # 收盘后自动跑「取数 → 求值 → 推送 → 日报」；关掉后只能手动触发
 enabled = true
 # 24 小时制 HH:MM，按 app.timezone 计算；设得比收盘早会取不到当日数据
-time = "15:30"
+time = "18:00"

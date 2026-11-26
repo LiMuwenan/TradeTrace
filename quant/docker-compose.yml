@@ -1,0 +1,37 @@
+# quant 容器编排：一个服务、一个容器，三个数据目录分别挂载。
+#
+# 宿主机路径用变量覆盖，不写死在文件里（Windows Docker Desktop 也认正斜杠）：
+#   RAW_DIR_HOST=G:/各种资料/量化数据/data/raw
+#   PARQUET_DIR_HOST=G:/各种资料/量化数据/data/market
+#   META_DIR_HOST=G:/各种资料/量化数据/data/meta
+#   QUANT_PORT=8000            # 只影响宿主机映射端口，容器内固定 8000
+#
+# 注意：Linux 上 bind mount 的属主必须可被容器内 uid 10001 写入，
+# 宿主机目录先 chown -R 10001:10001，或用 APP_UID / APP_GID 对齐当前用户。
+
+services:
+  quant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "quant:${TAG:-latest}"
+    container_name: quant
+    ports:
+      - "${QUANT_PORT:-8000}:8000"
+    environment:
+      QUANT_HOST: 0.0.0.0
+      QUANT_PORT: "8000"
+      QUANT_RAW_DIR: /data/raw
+      QUANT_PARQUET_DIR: /data/parquet
+      QUANT_META_DIR: /data/meta
+      TZ: Asia/Shanghai
+    volumes:
+      # 原始 CSV：不可变事实源，读写都要（导入与增量取数会写）
+      - "${RAW_DIR_HOST:-./data/raw}:/data/raw"
+      # 派生 Parquet：由原始数据重建，读写都要
+      - "${PARQUET_DIR_HOST:-./data/parquet}:/data/parquet"
+      # 用户记录库 meta.db：规则、预警、通知配置、日报快照，丢了就找不回
+      - "${META_DIR_HOST:-./data/meta}:/data/meta"
+    # 宿主机目录属主不是 10001 又不想 chown 时，用这个对齐（Linux 常见）
+    # user: "${APP_UID:-10001}:${APP_GID:-10001}"
+    restart: unless-stopped

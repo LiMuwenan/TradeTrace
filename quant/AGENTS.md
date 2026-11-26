@@ -97,6 +97,15 @@ npm run dev                                # 开发，/api 代理到 127.0.0.1:8
 npm run build
 ```
 
+## 容器部署
+
+`Dockerfile` 多阶段构建（Node 构建前端 → Python 运行时），单容器同时提供 API 与前端静态页（`web/dist` 存在时由 FastAPI 托管，SPA 回退到 `index.html`，`/api` 未命中仍是 JSON 错误）。配套 `docker-compose.yml`、`.dockerignore`。
+
+- **目录与端口用环境变量覆盖**，优先级为 环境变量 > `config.toml` > 代码默认：`QUANT_HOST`、`QUANT_PORT`、`QUANT_RAW_DIR`、`QUANT_PARQUET_DIR`、`QUANT_META_DIR`。镜像内只放 `config.example.toml`，本地 `config.toml`（含 `G:\` 绝对路径）不进镜像。
+- **三个目录分别挂载**：`/data/raw`、`/data/parquet`、`/data/meta`；compose 用 `RAW_DIR_HOST` / `PARQUET_DIR_HOST` / `META_DIR_HOST` 指向宿主机。
+- 容器以 uid `10001` 非 root 运行，bind mount 的宿主机目录必须可写：`chown -R 10001:10001`，或用 compose 里的 `APP_UID` / `APP_GID` 对齐当前用户。
+- 启动：`docker compose up -d --build`；健康检查打 `/api/v1/health`，端口跟随 `QUANT_PORT`。
+
 ## 约定
 
 - 接口响应统一为 `{code, message, data}`，字段名 camelCase，时间为 ISO 8601 带时区
