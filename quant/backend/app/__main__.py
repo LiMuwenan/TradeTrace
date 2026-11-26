@@ -11,8 +11,12 @@ from app.factory import create_app
 
 def main() -> None:
     settings = load_settings()
+    app = create_app(settings)
+    # 证券名称清单走 baostock 逐页拉取，冷启动约一分钟；放后台预热，别让第一次搜索替它等。
+    # 预热失败不影响启动：搜索仍可退回到只按代码搜。
+    app.state.stock_names.warm_up()
     uvicorn.run(
-        create_app(settings),
+        app,
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level.lower(),

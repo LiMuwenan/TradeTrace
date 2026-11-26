@@ -9,10 +9,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
+from app.storage.baostock_result import collect_rows
 from app.storage.schema import IngestError, normalize_code
 
 CACHE_FILENAME = "stock_names.json"
@@ -44,7 +46,8 @@ class BaostockNameProvider:
             result = bs.query_stock_basic()
             if result.error_code != "0":
                 raise IngestError(f"baostock 证券清单查询失败：{result.error_msg}")
-            rows = result.get_data()
+            # 不用 result.get_data()：它翻页时用 pandas 已删除的 DataFrame.append
+            rows = collect_rows(result)
             fields = list(result.fields)
         finally:
             bs.logout()
@@ -75,6 +78,9 @@ class StockNameCache:
     def __init__(self, meta_dir: Path | str, provider: NameProvider | None = None) -> None:
         self.path = Path(meta_dir) / CACHE_FILENAME
         self.provider = provider
+        # 联网刷新同一时刻只跑一次：baostock 客户端是进程级全局 socket，并发登录会互相踢会话，
+        # 而且整份清单要翻好几页（实测约 1 分钟），重复刷新纯属浪费
+        self._refresh_lock = threading.Lock()
 
     def names(self) -> dict[str, str]:
         """只读缓存，不访问网络。"""
@@ -88,11 +94,35 @@ class StockNameCache:
             return cached[0]
         if self.provider is None:
             return cached[0] if cached else {}
-        try:
-            return self.refresh()
-        except Exception as exc:  # 名称字典是尽力而为的外部依赖，失败不应阻断自选与搜索
-            logger.warning("股票名称字典刷新失败，沿用旧缓存：%s", exc)
-            return cached[0] if cached else {}
+        with self._refresh_lock:
+            # 等锁期间可能已被别的线程（如启动预热）刷新好，拿到锁后重新判一次
+            cached = self._read_cache()
+            if cached is not None and not self._expired(cached[1]):
+                return cached[0]
+            try:
+                return self.refresh()
+            except Exception as exc:  # 名称字典是尽力而为的外部依赖，失败不应阻断自选与搜索
+                logger.warning("股票名称字典刷新失败，沿用旧缓存：%s", exc)
+                return cached[0] if cached else {}
+
+    def warm_up(self) -> None:
+        """启动预热：缓存过期就在后台刷新，不让第一次搜索替这次联网等待。
+
+        整份证券清单要翻几页，冷启动约一分钟；放到后台线程后，服务照常接请求，
+        这段窗口内名称只有旧缓存（没有则退回按代码搜索）。
+        """
+        cached = self._read_cache()
+        if cached is not None and not self._expired(cached[1]):
+            return
+        if self.provider is None:
+            return
+        threading.Thread(
+            target=self._warm_up_worker, name="stock-names-warmup", daemon=True
+        ).start()
+
+    def _warm_up_worker(self) -> None:
+        # ensure 自己会兜住所有异常并降级，这里不再重复处理
+        self.ensure()
 
     def refresh(self) -> dict[str, str]:
         if self.provider is None:

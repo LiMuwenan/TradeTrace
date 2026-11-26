@@ -16,6 +16,7 @@ from typing import Protocol
 
 import pandas as pd
 
+from app.storage.baostock_result import collect_rows
 from app.storage.schema import (
     DAILY_COLUMNS,
     FACTOR_COLUMNS,
@@ -351,7 +352,7 @@ class BaostockFetcher:
             result = getattr(module, name)(date=trade_date)
             if result.error_code != "0":
                 raise IngestError(f"baostock {name} 失败：{result.error_msg}")
-            rows = result.get_data()
-            return pd.DataFrame(rows, columns=result.fields)
+            # 不用 result.get_data()：它翻页时用 pandas 已删除的 DataFrame.append
+            return pd.DataFrame(collect_rows(result), columns=result.fields)
         finally:
             module.logout()

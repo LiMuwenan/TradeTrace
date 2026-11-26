@@ -102,3 +102,5 @@ npm run build
 - 接口响应统一为 `{code, message, data}`，字段名 camelCase，时间为 ISO 8601 带时区
 - 配置非法时启动即失败并给出可操作提示，不做静默兜底
 - CORS 只允许显式列出的来源，禁止 `*`
+- 读 baostock 结果集一律走 `app/storage/baostock_result.py` 的 `collect_rows`，不用 `result.get_data()`：后者翻页时依赖 pandas 已删除的 `DataFrame.append`，只要结果超过一页就抛错（证券名称字典、每日增量取数都会踩到）
+- 证券名称字典（`data/meta/stock_names.json`，按日缓存）由 `python -m app` 启动时后台预热：整份清单要翻几页、约一分钟；预热或刷新失败只降级成「按代码搜索」，不阻断自选与搜索
