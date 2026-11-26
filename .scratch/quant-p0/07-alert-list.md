@@ -26,3 +26,16 @@ blocked_by: [05]
 - 该页面在移动端不做，App 侧由后续票实现
 - **本票不新建表**：预警即 `rule_state_event` 中 `event = 'enter'` 的行（ADR `0007-rule-state-event-stream.md`），已读是这行的 `read_at`
 - **列表默认排除 `replayed = 1` 的行**（静默回放产生的历史触发），否则新规则一启用就多出上百条「预警」；「触发历史」视图才包含回放记录与 `exit` 记录
+
+**导航**（2026-11-26 决定）：前端引入 `vue-router`，路由为 `/alerts`（列表）与 `/alerts/:id`（详情），`App.vue` 改为 `router-view`，Dashboard 侧栏增加「预警」入口并显示未读数。选它而非沿用 `ref` 切 view 的理由：详情页必须能刷新保持、能直接开链接，`ref` 方案下刷新会退回 landing。
+
+**接口**（都在 `/api/v1` 下）：
+
+| 路径 | 方法 | 用途 |
+|---|---|---|
+| `/alerts` | GET | 列表，参数 `read`(true/false/空)、`code`、`ruleType`、`page`、`pageSize`；响应含 `items`、`total`、`page`、`pageSize`、`unreadCount` |
+| `/alerts/{id}` | GET | 详情快照：触发值、阈值、使用价格、数据日期，以及 `rule` 完整参数 |
+| `/alerts/{id}/read` | PATCH | body `{read: bool}`，单条切换已读/未读 |
+| `/alerts/read-all` | POST | 一键全部已读，返回受影响条数 |
+
+**已读语义**（2026-11-26 决定）：进入详情**不自动**标记已读，必须显式点「已读」。理由：点开一眼又关掉是常态，自动标已读会让「稍后再处理」这条路径消失；预警的价值恰恰是「我还没看」。

@@ -35,4 +35,23 @@ blocked_by: [05]
 
 **推送对象**：只推 `rule_state_event` 中 `event = 'enter'` 且 `replayed = 0` 的行（ADR `0007-rule-state-event-stream.md`）。静默回放产生的历史触发一律不推，`exit` 记录不产生通知。
 
-**调用方式**（ADR `0008-evaluate-invokes-notify.md`）：本票只提供进程内 service 接口，由 05 求值结束后同步调用；**不新增对外端点，不做独立轮询**。ntfy 请求超时需短（建议 5s），超时即降级邮件；单次投递失败只记录结果，不抛异常回求值流程。补推靠重跑同一交易日——`pushed_at` 非空的行跳过，为空的重试。
+**调用方式**（ADR `0008-evaluate-invokes-notify.md`）：**推送触发**不新增对外端点，由 05 求值结束后同步调用进程内 service；不做独立轮询。ntfy 请求超时需短（建议 5s），超时即降级邮件；单次投递失败只记录结果，不抛异常回求值流程。补推靠重跑同一交易日——`pushed_at` 非空的行跳过，为空的重试。
+
+> 「不新增对外端点」的收窄（2026-11-26）：本条只约束**推送的触发路径**（防止绕过求值直接推库里的行），不约束设置页。设置页要读写配置、要发测试通知，必须走 HTTP，故新增下列端点（ADR `0009-notification-config-and-daily-quota.md`）。
+
+**配置与记录**（2026-11-26 决定，ADR 0009）：
+
+- 配置与投递记录都落 `{meta_dir}/meta.db`：`notification_config`（单行，ntfy 地址与主题、收件邮箱、SMTP 主机/端口/账号/密码/TLS、每日上限开关与数值）、`notification_log`（每次尝试一行：`event_id`、交易日、通道、结果 `ok`/`fallback`/`failed`、错误摘要、尝试时间）。
+- `config.toml` **不放**任何通知字段——它保持部署参数定位，通知配置是运行时可改的用户数据。
+- 凭据明文存库，但**读取接口不回显**：主题名、密码等替换为「是否已配置」布尔量；写入接口字段留空表示不修改。
+
+**接口**（都在 `/api/v1` 下）：
+
+| 路径 | 方法 | 用途 |
+|---|---|---|
+| `/settings/notification` | GET | 读取配置（凭据脱敏）+ 当日用量 |
+| `/settings/notification` | PUT | 保存配置，仅传要改的字段 |
+| `/settings/notification/test` | POST | 发一条测试通知，返回实际通道与错误摘要 |
+| `/notifications/log` | GET | 投递记录，参数 `date`、`page`、`pageSize` |
+
+**上限计数口径**（2026-11-26 决定）：按**交易日**重置，计**尝试投递的预警条数**（`notification_log` 中该交易日不重复 `event_id` 数，成功/降级/失败都算一次）。不用自然日——预警绑定交易日，按自然日会在周末与节假日空转重置。不数「成功数」——ntfy 故障当天全走邮件时，只数成功等于放弃上限。
