@@ -29,7 +29,7 @@ data/                 不入库：raw/ 原始 CSV 归档，parquet/ 按年分区
 
 ```
 data/raw/daily/YYYY-MM-DD.csv     全市场日 K 横截面（18 列，UTF-8 BOM）
-data/raw/factors/YYYY-MM-DD.csv   当日除权清单（可为空，只有除权标的）
+data/raw/factors/YYYY.csv          按年归并的除权清单（历史目录叫 factor/ 也兼容，旧的 YYYY-MM-DD.csv 仍可读）
 data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_factor
 data/parquet/store_state.json     因子基准与最近一次导入结果
 data/meta/watchlist.json          自选清单（用户数据，不可从行情重建）
