@@ -16,10 +16,11 @@ from typing import Iterable
 
 from app.config import Settings
 from app.services.notify import Notifier, NullNotifier
-from app.storage import rule_store
+from app.storage import notify_store, rule_store
 from app.storage.meta_db import MA_RULE_TYPES, Rule, connect
 from app.storage.parquet_store import ParquetStore
 from app.storage.schema import normalize_code
+from app.storage.stock_names import StockNameCache
 from app.storage.watchlist_store import load_watchlist
 
 logger = logging.getLogger(__name__)
@@ -241,26 +242,29 @@ def evaluate_day(
 
 
 def _push_pending(conn, settings: Settings, trade_date: str, notifier: Notifier) -> dict:
-    """把当日待投递的预警交给通知通道。失败只记录，不影响求值结果（ADR 0008）。"""
+    """把当日待投递的预警交给通知通道。失败只记录，不影响求值结果（ADR 0008）。
+
+    每日上限按交易日计「尝试投递的条数」（ADR 0009）：超限的行不标记 `pushed_at`，
+    仍留在库里由 07 的列表展示。
+    """
     pending = rule_store.pending_alerts(conn, trade_date)
     if not notifier.configured:
         return {"attempted": 0, "succeeded": 0, "failed": 0, "skipped": len(pending),
                 "reason": "通知通道尚未配置"}
 
+    limit = notify_store.load_config(conn).effective_limit()
+    used = notify_store.attempted_ids(conn, trade_date)
+    names = StockNameCache(settings.meta_dir).names()
+
     succeeded = 0
     failed = 0
+    skipped = 0
     for row in pending:
-        alert = {
-            "id": row["id"],
-            "code": row["code"],
-            "tradeDate": row["trade_date"],
-            "ruleId": row["rule_id"],
-            "ruleType": row["rule_type"],
-            "ruleName": row["rule_name"],
-            "value": row["value"],
-            "threshold": row["threshold"],
-            "price": row["price"],
-        }
+        alert = _alert_payload(row, names)
+        if limit is not None and alert["id"] not in used and len(used) >= limit:
+            skipped += 1
+            continue
+        used.add(alert["id"])
         try:
             outcome = notifier.send(alert)
         except Exception as exc:  # 通知实现的任何异常都不得反向影响求值
@@ -275,7 +279,29 @@ def _push_pending(conn, settings: Settings, trade_date: str, notifier: Notifier)
         else:
             logger.warning("推送失败：%s（%s）", row["code"], outcome.error)
             failed += 1
-    return {"attempted": len(pending), "succeeded": succeeded, "failed": failed, "skipped": 0}
+    return {
+        "attempted": succeeded + failed,
+        "succeeded": succeeded,
+        "failed": failed,
+        "skipped": skipped,
+    }
+
+
+def _alert_payload(row, names: dict[str, str]) -> dict:
+    """一条预警交给通知通道的形状。名称缺失时只给代码，不编造。"""
+    return {
+        "id": int(row["id"]),
+        "code": row["code"],
+        "name": names.get(row["code"], ""),
+        "tradeDate": row["trade_date"],
+        "ruleId": row["rule_id"],
+        "ruleType": row["rule_type"],
+        "ruleName": row["rule_name"],
+        "value": row["value"],
+        "threshold": row["threshold"],
+        "price": row["price"],
+        "window": row["rule_window"],
+    }
 
 
 def replay_rule(settings: Settings, rule_id: int) -> dict:

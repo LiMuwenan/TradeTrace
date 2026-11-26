@@ -235,7 +235,7 @@ def record_event(
 def pending_alerts(conn: sqlite3.Connection, trade_date: str | None = None) -> list[sqlite3.Row]:
     """待投递的预警：未推送过、非回放产生的 enter 记录。"""
     sql = """
-        SELECT e.*, r.type AS rule_type, r.name AS rule_name
+        SELECT e.*, r.type AS rule_type, r.name AS rule_name, r.window AS rule_window
         FROM rule_state_event e
         JOIN alert_rule r ON r.id = e.rule_id
         WHERE e.event = 'enter'

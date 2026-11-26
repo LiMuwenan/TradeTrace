@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import alerts, data, health, rules, watchlist
+from app.api import alerts, data, health, rules, settings as settings_api, watchlist
 from app.config import Settings, load_settings
 from app.schemas import fail
-from app.services.notify import Notifier, NullNotifier
+from app.services.notify import AlertNotifier, Notifier
 from app.storage.stock_names import BaostockNameProvider, StockNameCache
 from app.storage.watchlist_store import WatchlistCorruptError
 
@@ -36,8 +36,8 @@ def create_app(
     app.state.stock_names = stock_names or StockNameCache(
         settings.meta_dir, BaostockNameProvider()
     )
-    # 08 号票实现真实通道后替换；未配置时求值仍会落库，只是不投递（ADR 0008）
-    app.state.notifier = notifier or NullNotifier()
+    # 未配置通道时求值仍会落库，只是不投递（ADR 0008）；配置在库里，改完即时生效
+    app.state.notifier = notifier or AlertNotifier(settings)
 
     app.add_middleware(
         CORSMiddleware,
@@ -64,6 +64,7 @@ def create_app(
     app.include_router(watchlist.router, prefix=API_PREFIX)
     app.include_router(rules.router, prefix=API_PREFIX)
     app.include_router(alerts.router, prefix=API_PREFIX)
+    app.include_router(settings_api.router, prefix=API_PREFIX)
     return app
 
 

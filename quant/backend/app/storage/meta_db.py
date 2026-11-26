@@ -54,6 +54,36 @@ CREATE INDEX IF NOT EXISTS idx_event_code_rule
     ON rule_state_event (code, rule_id, trade_date);
 CREATE INDEX IF NOT EXISTS idx_event_alert_list
     ON rule_state_event (event, replayed, trade_date DESC);
+
+-- 通知配置：单行（id = 1）。运行时由设置页修改，因此不放 config.toml（ADR 0009）
+CREATE TABLE IF NOT EXISTS notification_config (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    ntfy_server   TEXT    NOT NULL DEFAULT 'https://ntfy.sh',
+    ntfy_topic    TEXT,
+    ntfy_token    TEXT,
+    email_to      TEXT,
+    smtp_host     TEXT,
+    smtp_port     INTEGER,
+    smtp_user     TEXT,
+    smtp_password TEXT,
+    smtp_starttls INTEGER NOT NULL DEFAULT 1,
+    daily_limit   INTEGER NOT NULL DEFAULT 50,
+    limit_enabled INTEGER NOT NULL DEFAULT 1,
+    updated_at    TEXT    NOT NULL
+);
+
+-- 投递记录：每次尝试一行。event_id 为空表示设置页的测试通知，不占每日额度
+CREATE TABLE IF NOT EXISTS notification_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id     INTEGER REFERENCES rule_state_event(id),
+    trade_date   TEXT    NOT NULL,
+    channel      TEXT,
+    result       TEXT    NOT NULL CHECK (result IN ('ok', 'fallback', 'failed')),
+    detail       TEXT,
+    attempted_at TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notify_log_date
+    ON notification_log (trade_date, event_id);
 """
 
 
