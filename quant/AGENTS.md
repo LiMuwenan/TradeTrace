@@ -105,6 +105,7 @@ npm run build
 - **三个目录分别挂载**：`/data/raw`、`/data/parquet`、`/data/meta`；compose 用 `RAW_DIR_HOST` / `PARQUET_DIR_HOST` / `META_DIR_HOST` 指向宿主机。
 - 容器以 uid `10001` 非 root 运行，bind mount 的宿主机目录必须可写：`chown -R 10001:10001`，或用 compose 里的 `APP_UID` / `APP_GID` 对齐当前用户。
 - 启动：`docker compose up -d --build`；健康检查打 `/api/v1/health`，端口跟随 `QUANT_PORT`。
+- **CI 发布**：`.github/workflows/quant-image.yml`（仓库根级，GitHub 只认这一层）。push 到 `main`（含 PR 合并）先跑 pytest，通过后构建并推送到 `ghcr.io/<owner>/<repo>/quant`，标签为 `main` 与 `sha-<短 SHA>`；PR 只跑测试、不推送；也支持手动 `workflow_dispatch`。镜像用 `GITHUB_TOKEN` 推送，构建后会在 runner 上起容器打健康检查做冒烟。私有仓库拉镜像需 `docker login ghcr.io`（PAT 带 `read:packages`）。
 
 ## 约定
 
