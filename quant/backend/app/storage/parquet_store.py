@@ -42,6 +42,17 @@ class ParquetStore:
             return []
         return sorted(self.root.glob("*.parquet"))
 
+    def has_date(self, trade_date: str) -> bool:
+        """该交易日是否已有数据入库。
+
+        只读当年文件：日 K 不会跨年归档，查 2026-11-26 时去扫 2025 的文件没有意义。
+        """
+        path = self.year_path(int(trade_date[:4]))
+        if not path.is_file():
+            return False
+        sql = f"SELECT 1 FROM read_parquet(?) WHERE date = ? LIMIT 1"
+        return not self._query(sql, [str(path), trade_date]).empty
+
     def merge(self, rows: pd.DataFrame) -> MergeResult:
         """把新行并入对应年份文件，按 (标的, 日期) 覆盖旧行。"""
         if rows.empty:

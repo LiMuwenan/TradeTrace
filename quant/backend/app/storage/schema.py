@@ -70,6 +70,14 @@ class IngestError(RuntimeError):
     """数据不合格，拒绝写入。消息面向用户，可直接展示。"""
 
 
+class NoMarketDataError(IngestError):
+    """数据源在该交易日没有返回任何数据：非交易日，或接口异常。
+
+    调度据此把当天判为「跳过」而不是「失败」——票面约定不对接交易日历，
+    只以数据源是否返回当日数据来判定（见 10 号票）。
+    """
+
+
 def normalize_code(raw: object) -> str:
     """把各种写法的标的代码归一为 `sh.600000` / `sz.000001`。
 

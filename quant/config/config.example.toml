@@ -19,3 +19,9 @@ cors_origins = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
 ]
+
+[schedule]
+# 收盘后自动跑「取数 → 求值 → 推送 → 日报」；关掉后只能手动触发
+enabled = true
+# 24 小时制 HH:MM，按 app.timezone 计算；设得比收盘早会取不到当日数据
+time = "15:30"

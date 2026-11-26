@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bell, ChevronRight, FileText, Home, LayoutDashboard, ListFilter, PanelLeftClose, Settings2 } from 'lucide-vue-next'
+import { Activity, Bell, ChevronRight, FileText, Home, LayoutDashboard, ListFilter, PanelLeftClose, Settings2 } from 'lucide-vue-next'
 import { cn } from '../lib/utils'
 
 defineProps({
@@ -21,6 +21,7 @@ const navGroups = [
       { label: '规则', to: '/rules', icon: ListFilter },
       { label: '预警列表', to: '/alerts', icon: Bell, badge: true },
       { label: '日报', to: '/reports', icon: FileText },
+      { label: '运行记录', to: '/pipeline', icon: Activity },
     ],
   },
   {
@@ -44,6 +45,7 @@ const PAGE_TITLES = {
   '/alerts': '预警',
   '/rules': '规则',
   '/reports': '日报',
+  '/pipeline': '运行记录',
   '/settings/notification': '通知设置',
 }
 const pageTitle = computed(() =>

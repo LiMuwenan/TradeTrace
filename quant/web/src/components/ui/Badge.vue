@@ -7,7 +7,7 @@ const props = defineProps({
   variant: {
     type: String,
     default: 'default',
-    validator: (v) => ['default', 'secondary', 'outline', 'success', 'warning'].includes(v),
+    validator: (v) => ['default', 'secondary', 'outline', 'success', 'warning', 'destructive'].includes(v),
   },
   class: { type: [String, Array, Object], default: '' },
 })
@@ -22,6 +22,7 @@ const badgeVariants = cva(
         outline: 'border-border text-foreground',
         success: 'border-transparent bg-success-soft text-success',
         warning: 'border-transparent bg-warning-soft text-warning',
+        destructive: 'border-transparent bg-destructive text-destructive-foreground',
       },
     },
     defaultVariants: { variant: 'default' },

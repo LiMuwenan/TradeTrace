@@ -15,7 +15,7 @@ A 股量化数据分析与预警平台。**只读行情，不接交易**：不�
 
 ## Web 页面风格
 
-Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、个股详情、日报、预警列表、预警详情、通知设置六页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/stocks/:code`、`/reports`、`/reports/:date`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
+Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、个股详情、日报、预警列表、预警详情、运行记录、通知设置七页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/stocks/:code`、`/reports`、`/reports/:date`、`/alerts`、`/alerts/:id`、`/pipeline`、`/settings/notification`。新增页面必须沿用以下约定。
 
 > **2026-11-26 变更**：原约定为「由 `App.vue` 的 `view` 状态切换，不引入 vue-router」。改为路由的原因是预警详情必须能刷新保持、能直接开链接，`ref` 切视图做不到这两点（见 `.scratch/quant-p0/07-alert-list.md`）。视觉与结构约定不变，新增页面仍需沿用控制台的左侧分组侧栏 + 顶栏结构（预警三页通过 `web/src/components/AppShell.vue` 复用）。
 
@@ -37,11 +37,11 @@ Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Da
 
 ```
 backend/app/api/      路由，统一前缀 /api/v1
-backend/app/services/ 业务逻辑（取数、规则求值、通知、日报）
+backend/app/services/ 业务逻辑（取数、规则求值、通知、日报、流水线、定时器）
 backend/app/storage/  Parquet 读写与分区
 backend/tests/        与 app 平行的测试
 web/src/api/          接口封装，页面不直接写 fetch
-web/src/router.js     路由表：/、/dashboard、/alerts、/alerts/:id、/settings/notification
+web/src/router.js     路由表：/、/dashboard、/alerts、/alerts/:id、/pipeline、/settings/notification
 web/src/components/ui/ shadcn 风格基础组件（Button / Card 系列 / Input / Badge）
 web/src/lib/utils.js  cn()：clsx + tailwind-merge 的 class 合并
 web/tailwind.config.js 语义色 token 映射（见「Web 页面风格」）
@@ -58,7 +58,7 @@ data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_f
 data/parquet/store_state.json     因子基准与最近一次导入结果
 data/meta/watchlist.json          自选清单（用户数据，不可从行情重建）
 data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单）
-data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录、daily_report 日报快照
+data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录、daily_report 日报快照、pipeline_run / pipeline_stage 运行与阶段记录、pipeline_cursor 增量游标
 ```
 
 `meta.db` 只存用户记录，不存行情；行情仍在 Parquet。它是嵌入式单文件库，不是独立数据库服务。注意与 `lianghua/data/meta.db` 同名但**完全无关**，禁止跨项目读写（见仓库根 `AGENTS.md`）。
@@ -73,6 +73,8 @@ data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3�
 - 原始 CSV 是事实源，Parquet 是派生索引；**不得修改已归档的原始文件**。
 - 落盘只存不复权价与后复权因子，不存前复权数据。
 - **规则定义只有一个写入口：Web 的规则页**（`app/services/rules.py`）。05 号的 TOML 种子导入已随 06 上线删除，不要再加回配置文件写规则的第二条路径。
+- **整条收盘链只有一个入口：`app/services/pipeline.py` 的 `run`**。`app.daily_update` 只做增量取数，不要在那里补求值或推送，否则同一天会出现两条推送路径。
+- **定时只用进程内 `asyncio`（`app/services/scheduler.py`）**，不引 cron、不加调度框架；流水线是同步代码，到点后经 `asyncio.to_thread` 执行，不阻塞请求。
 
 ## 命令
 
@@ -83,7 +85,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m app          # 监听地址与端口取自 config/config.toml
 .\.venv\Scripts\python.exe -m app.import_history [历史目录]  # 默认读 config 的 raw_dir
-.\.venv\Scripts\python.exe -m app.daily_update [YYYY-MM-DD]  # 每日增量，默认今天
+.\.venv\Scripts\python.exe -m app.daily_update [YYYY-MM-DD]  # 只做增量取数，不做求值与日报
+
+# 收盘流水线（取数 → 求值推送 → 日报）：定时随服务启动，无需单独进程
+# config.toml 里 schedule.enabled = true、schedule.time = "15:30"；
+# 补跑或重跑走 Web 运行记录页，或 POST /api/v1/pipeline/run
 
 # 前端（在 quant/web 下）
 npm install

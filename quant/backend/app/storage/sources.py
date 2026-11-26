@@ -20,6 +20,7 @@ from app.storage.schema import (
     DAILY_COLUMNS,
     FACTOR_COLUMNS,
     IngestError,
+    NoMarketDataError,
     normalize_code,
 )
 
@@ -281,7 +282,7 @@ class RealtimeSource:
         daily = self.fetcher.fetch_daily(trade_date)
         factors = self.fetcher.fetch_factors(trade_date)
         if daily.empty:
-            raise IngestError(f"{trade_date} 没有取到日 K 数据（非交易日或接口失败）")
+            raise NoMarketDataError(f"{trade_date} 没有取到日 K 数据（非交易日或接口失败）")
 
         daily_dir = self.raw_dir / "daily"
         factor_dir = _factor_dir(self.raw_dir)

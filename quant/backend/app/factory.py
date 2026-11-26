@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """应用工厂：便于测试注入配置，也便于部署时按环境创建实例。"""
+import asyncio
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -9,10 +11,11 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import alerts, data, health, reports, rules, settings as settings_api, stocks, watchlist
+from app.api import alerts, data, health, pipeline, reports, rules, settings as settings_api, stocks, watchlist
 from app.config import Settings, load_settings
 from app.schemas import fail
 from app.services.notify import AlertNotifier, Notifier
+from app.services.scheduler import DailyScheduler
 from app.storage.stock_names import BaostockNameProvider, StockNameCache
 from app.storage.watchlist_store import WatchlistCorruptError
 
@@ -27,10 +30,27 @@ def create_app(
     settings = settings or load_settings()
     _ensure_dirs_writable(settings)
 
+    scheduler = DailyScheduler(settings) if settings.schedule_enabled else None
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        task = None
+        if scheduler is not None:
+            scheduler.notifier = app.state.notifier
+            task = asyncio.create_task(scheduler.serve())
+        try:
+            yield
+        finally:
+            if scheduler is not None:
+                scheduler.stop()
+            if task is not None:
+                task.cancel()
+
     app = FastAPI(
         title="Quant Platform",
         description="A 股量化数据分析与预警平台（只读行情，不接交易）",
         version=__version__,
+        lifespan=lifespan,
     )
     app.state.settings = settings
     app.state.stock_names = stock_names or StockNameCache(
@@ -66,6 +86,7 @@ def create_app(
     app.include_router(rules.router, prefix=API_PREFIX)
     app.include_router(alerts.router, prefix=API_PREFIX)
     app.include_router(reports.router, prefix=API_PREFIX)
+    app.include_router(pipeline.router, prefix=API_PREFIX)
     app.include_router(settings_api.router, prefix=API_PREFIX)
     return app
 

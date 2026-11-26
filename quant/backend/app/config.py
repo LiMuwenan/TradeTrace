@@ -8,6 +8,7 @@
 数据目录之类的相对路径一律相对 quant 项目根解析，不受启动时工作目录影响。
 """
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,10 @@ class Settings:
     timezone: str
     log_level: str
     cors_origins: list[str] = field(default_factory=list)
+    # 收盘后自动跑流水线；默认关，由 config.toml 的 [schedule] 显式打开，
+    # 这样直接构造 Settings 的测试不会意外启动后台任务
+    schedule_enabled: bool = False
+    schedule_time: str = "15:30"
 
 
 def resolve_config_path(explicit: Path | str | None = None) -> Path:
@@ -69,6 +74,7 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
     server = raw.get("server") or {}
     data = raw.get("data") or {}
     app = raw.get("app") or {}
+    schedule = raw.get("schedule") or {}
 
     port = int(server.get("port", 8000))
     if not 1 <= port <= 65535:
@@ -86,6 +92,9 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
     except ZoneInfoNotFoundError as exc:
         raise ValueError(f"app.timezone 非法：{timezone}") from exc
 
+    schedule_time = str(schedule.get("time", "15:30"))
+    _validate_clock(schedule_time)
+
     return Settings(
         config_path=path,
         host=str(server.get("host", "127.0.0.1")),
@@ -97,7 +106,19 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
         timezone=timezone,
         log_level=str(app.get("log_level", "INFO")).upper(),
         cors_origins=cors_origins,
+        schedule_enabled=bool(schedule.get("enabled", False)),
+        schedule_time=schedule_time,
     )
+
+
+def _validate_clock(value: str) -> None:
+    """`HH:MM`，24 小时制。格式写错就启动失败，不要静默退回默认时间。"""
+    match = re.fullmatch(r"(\d{2}):(\d{2})", value)
+    if match is None:
+        raise ValueError(f"schedule.time 应为 HH:MM，当前为 {value!r}")
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"schedule.time 超出范围：{value}")
 
 
 def _resolve_dir(value: str) -> Path:

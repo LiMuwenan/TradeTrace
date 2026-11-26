@@ -170,3 +170,19 @@ export function generateReport(tradeDate) {
     body: JSON.stringify({ date: tradeDate }),
   })
 }
+
+// --- 收盘流水线（10 号票）-------------------------------------------------
+
+export function fetchPipelineRuns({ page = 1, pageSize = 20, date } = {}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (date) params.set('date', date)
+  return request(`/pipeline/runs?${params.toString()}`)
+}
+
+/** 手动重跑某交易日；catchUp 为真时补跑该日之前的缺口。 */
+export function runPipeline(date, catchUp = false) {
+  return request('/pipeline/run', {
+    method: 'POST',
+    body: JSON.stringify({ date, catchUp }),
+  })
+}

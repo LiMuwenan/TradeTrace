@@ -183,6 +183,7 @@ const navGroups = [
       { label: '服务状态', icon: Activity, target: 'health' },
       { label: '自选', icon: Star, target: 'watchlist' },
       { label: '数据状态', icon: Database, target: 'data-status' },
+      { label: '运行记录', icon: RefreshCw, to: '/pipeline' },
     ],
   },
   {

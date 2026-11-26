@@ -94,6 +94,39 @@ CREATE TABLE IF NOT EXISTS daily_report (
     pushed_at    TEXT,
     push_channel TEXT
 );
+
+-- 收盘流水线的运行记录（10 号票）。同一天可以重跑，因此不设唯一键。
+CREATE TABLE IF NOT EXISTS pipeline_run (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_date   TEXT    NOT NULL,
+    trigger_kind TEXT    NOT NULL CHECK (trigger_kind IN ('scheduled', 'manual', 'catchup')),
+    status       TEXT    NOT NULL CHECK (status IN ('running', 'ok', 'failed', 'skipped')),
+    started_at   TEXT    NOT NULL,
+    finished_at  TEXT,
+    error        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_run_date
+    ON pipeline_run (trade_date, started_at DESC);
+
+-- 单次运行的各阶段结果：失败在哪一步、各自耗时多少
+CREATE TABLE IF NOT EXISTS pipeline_stage (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id     INTEGER NOT NULL REFERENCES pipeline_run(id),
+    stage      TEXT    NOT NULL,
+    status     TEXT    NOT NULL CHECK (status IN ('ok', 'skipped', 'failed')),
+    elapsed_ms INTEGER NOT NULL,
+    detail     TEXT,
+    error      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_stage_run
+    ON pipeline_stage (run_id);
+
+-- 增量游标：最后一个「整条流水线成功」的交易日。缺口由它与今天之间的日期推出。
+CREATE TABLE IF NOT EXISTS pipeline_cursor (
+    id                INTEGER PRIMARY KEY CHECK (id = 1),
+    last_success_date TEXT,
+    updated_at        TEXT    NOT NULL
+);
 """
 
 
