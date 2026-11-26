@@ -1,5 +1,9 @@
 # quant 容器编排：一个服务、一个容器，三个数据目录分别挂载。
 #
+# 两种起法：
+#   docker compose pull && docker compose up -d    # 用 CI 推到 GHCR 的镜像（私有库先 docker login ghcr.io）
+#   docker compose up -d --build                   # 用本地代码重新构建
+#
 # 宿主机路径用变量覆盖，不写死在文件里（Windows Docker Desktop 也认正斜杠）：
 #   RAW_DIR_HOST=G:/各种资料/量化数据/data/raw
 #   PARQUET_DIR_HOST=G:/各种资料/量化数据/data/market
