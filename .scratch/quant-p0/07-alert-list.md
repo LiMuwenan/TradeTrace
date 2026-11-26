@@ -43,3 +43,5 @@ blocked_by: [05]
 **实施记录**（2026-11-26）：查询在 `app/storage/rule_store.py`（`list_alerts` / `unread_alert_count` / `get_alert` / `set_alert_read` / `mark_all_alerts_read`），组装在 `app/services/alerts.py`，路由在 `app/api/alerts.py`。前端 `AlertsPage.vue` + `AlertDetailPage.vue` + 共享顶栏 `AppShell.vue`，路由见 `web/src/router.js`。指标文案与推送正文共用一套口径（`web/src/lib/alertFormat.js` 对齐 `services/notify.py`），避免页面和手机看到两种说法。
 
 **实施中的判断**：详情页不自动标已读（见上方「已读语义」）；`pushStateText` 只用 `pushed_at` 判断「是否已送达手机」，与已读状态互不影响——这两件事混起来会让「没收到推送」被误读成「没看过」。
+
+**审查修正**（2026-11-26）：`get_alert` / `set_alert_read` 原先没有排除 `replayed=1`，会把回放产生的历史触发当成预警（能查详情、能标已读），与列表口径矛盾；已补 `AND replayed = 0` 与对应测试。

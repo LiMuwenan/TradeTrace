@@ -62,3 +62,5 @@ blocked_by: [05]
 
 - ntfy 的 `Title` 头没用来放标题——HTTP 头按 latin-1 编码，中文标题会乱码；正文本身已自足，这比塞一半信息进头里更可靠。
 - 设置页的测试通知记 `notification_log` 时 `event_id` 为空，因此不计入每日额度，但仍可在投递记录里查到。
+
+**审查修正**（2026-11-26）：三处——① `ntfyServer` 传空串原先会落 `None`，拼 URL 时 `rstrip` 抛 `AttributeError`，改为回落默认地址；② 设置页「用量」原先按自然日统计，周末会显示 0/50 而额度其实已满，改为取 `notification_log` 里最近的交易日；③ 前端指标文案与推送正文漂移（`ma_cross` 缺窗口、`breakout` 措辞不同），列表接口补 `window` 字段后两端统一。
