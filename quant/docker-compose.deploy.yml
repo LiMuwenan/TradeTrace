@@ -1,0 +1,39 @@
+# 只运行 CI 已推送的镜像，不在本地构建；适合部署机 / NAS / 另一台电脑。
+#
+#   docker compose -f docker-compose.deploy.yml up -d
+#   docker compose -f docker-compose.deploy.yml logs -f
+#   docker compose -f docker-compose.deploy.yml down
+#
+# 指定某个提交的构建（例如你现在拉到的 sha-6f59ab2）：
+#   Git Bash：   TAG=sha-6f59ab2 docker compose -f docker-compose.deploy.yml up -d
+#   PowerShell： $env:TAG="sha-6f59ab2"; docker compose -f docker-compose.deploy.yml up -d
+#
+# 宿主机路径用正斜杠；中文路径可以直接写。私有镜像先 docker login ghcr.io。
+# 不要挂载本地 config.toml：里面的 G:\ 绝对路径在容器里不存在，
+# 容器内的目录一律由下面三个 * _DIR_HOST 决定。
+
+services:
+  quant:
+    image: "ghcr.io/limuwenan/tradetrace/quant:${TAG:-main}"
+    container_name: quant
+    ports:
+      # 左边是宿主机端口，右边固定 8000（容器内由 QUANT_PORT 控制）
+      - "${QUANT_PORT:-8000}:8000"
+    environment:
+      QUANT_HOST: 0.0.0.0
+      QUANT_PORT: "8000"
+      QUANT_RAW_DIR: /data/raw
+      QUANT_PARQUET_DIR: /data/parquet
+      QUANT_META_DIR: /data/meta
+      TZ: Asia/Shanghai
+    volumes:
+      # 原始 CSV：导入与每日增量取数都会写
+      - "${RAW_DIR_HOST:-G:/各种资料/量化数据/data/raw}:/data/raw"
+      # 派生 Parquet：DuckDB 直读，重建也写这里
+      - "${PARQUET_DIR_HOST:-G:/各种资料/量化数据/data/market}:/data/parquet"
+      # 用户记录库 meta.db：规则、预警、通知配置、日报快照，丢了找不回
+      - "${META_DIR_HOST:-F:/Project/TradeTrace/quant/data/meta}:/data/meta"
+    restart: unless-stopped
+    # Windows 的 bind mount 一般可直接写；若启动报「xxx 不可写」，
+    # 先确认 Docker Desktop 已共享该盘符，仍不行再临时打开下面这行（不推荐常开）。
+    # user: "0:0"
