@@ -36,3 +36,5 @@ blocked_by: []
 - `src/components/ui/` 下是最小可复用的 Button / Card 系列 / Input / Badge，按需扩展；reka-ui 只用于「说明与帮助」的折叠面板。
 - 后端未改动；`api/client.js` 未改动，原三块功能的状态与方法原样迁移到 `Dashboard.vue`。
 - `quant/assets/` 下两张参考截图不入库。
+
+**后续变更**（2026-11-26）：本票「不引入 vue-router」的约定已被 07 号票推翻——预警详情需能刷新保持、能直接开链接，`ref` 切视图做不到。现由 `web/src/router.js` 负责路由，本票的视觉与结构约定（落地页 + 控制台、token、涨跌色、复用 `components/ui/`）全部不变。规则已同步进 `quant/AGENTS.md`。
