@@ -9,9 +9,27 @@ A 股量化数据分析与预警平台。**只读行情，不接交易**：不�
 ## 技术栈
 
 - 后端：Python 3.11+、FastAPI、uvicorn；配置用 TOML + 标准库 `tomllib`
-- 前端：Vue 3 + Vite
+- 前端：Vue 3 + Vite 6；Tailwind CSS 3 + shadcn 风格组件栈（`class-variance-authority`、`clsx`、`tailwind-merge`、`lucide-vue-next`、`reka-ui`）
 - 移动端（后续）：Expo/RN
 - 查询层：DuckDB 直读 Parquet（不引入独立数据库服务）
+
+## Web 页面风格
+
+Web 端为浅色的现代 SaaS 风格，双视图结构：`LandingPage`（落地页）+ `Dashboard`（控制台），由 `App.vue` 的 `view` 状态切换，**不引入 vue-router**。新增页面必须沿用以下约定。
+
+**落地页**：渐变光晕 hero、小号大写 eyebrow、大字号紧字距标题、主次按钮、右侧展示卡片、三栏特性区；留白充足，不堆砌信息。
+
+**控制台**：左侧可折叠分组侧栏 + 顶栏（搜索框 / ⌘K / 语言 / 头像）+ 主内容卡片网格；卡片细边框、小圆角、弱阴影；解释性内容用折叠面板。
+
+**实现纪律**：
+
+- 设计 token 统一在 `web/src/style.css` 的 `:root` CSS 变量中，`web/tailwind.config.js` 只做语义映射；新增颜色先加 token，不直接写死色值。
+- A 股口径的涨跌色固定为 `--up`（红）/ `--down`（绿），**不得**用后端的 `ok/bad` 语义替代，避免涨跌方向反转。
+- 基础组件放 `web/src/components/ui/`，新增页面优先复用；样式合并用 `cn()`（`web/src/lib/utils.js`），不手写 class 冲突处理。
+- 页面不直接写 `fetch`，接口调用走 `web/src/api/client.js`。
+- `web/src/api/client.js` 与后端接口不属于视觉改造范围；换皮时只动组件与样式，不迁移接口逻辑。
+
+风格来源与改造记录见 `.scratch/quant-p0/12-web-ui-style.md`。
 
 ## 目录
 
@@ -21,6 +39,9 @@ backend/app/services/ 业务逻辑（取数、规则求值、通知、日报）
 backend/app/storage/  Parquet 读写与分区
 backend/tests/        与 app 平行的测试
 web/src/api/          接口封装，页面不直接写 fetch
+web/src/components/ui/ shadcn 风格基础组件（Button / Card 系列 / Input / Badge）
+web/src/lib/utils.js  cn()：clsx + tailwind-merge 的 class 合并
+web/tailwind.config.js 语义色 token 映射（见「Web 页面风格」）
 config/               config.example.toml 入库，config.toml 不入库
 data/                 不入库：raw/ 原始 CSV 归档，parquet/ 按年分区，meta/ 用户数据与字典缓存
 ```
