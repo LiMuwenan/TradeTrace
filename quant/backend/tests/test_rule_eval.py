@@ -131,6 +131,48 @@ def test_transitions_skip_suspended_days_without_changing_state():
     assert [(item.index, item.event) for item in events] == [(2, "enter")]
 
 
+def test_next_event_only_reports_changes():
+    satisfied = rule_eval.Signal(satisfied=True, value=None, threshold=None, price=10.0)
+    unsatisfied = rule_eval.Signal(satisfied=False, value=None, threshold=None, price=10.0)
+
+    assert rule_eval.next_event(None, satisfied) == "enter"
+    assert rule_eval.next_event("enter", satisfied) is None
+    assert rule_eval.next_event("enter", unsatisfied) == "exit"
+    assert rule_eval.next_event(None, unsatisfied) is None
+    assert rule_eval.next_event("exit", unsatisfied) is None
+
+
+@pytest.mark.parametrize(
+    "type, threshold, value, price, expected",
+    [
+        ("oversold", 20.0, 17.0, 8.0, True),
+        ("oversold", 20.0, 10.0, 8.0, False),
+        ("volume_surge", 1.5, 1.25, 8.0, True),
+        ("volume_surge", 1.5, 1.0, 8.0, False),
+        ("volume_shrink", 0.6, 0.7, 8.0, True),
+        ("volume_shrink", 0.6, 0.9, 8.0, False),
+        ("breakout", None, 10.0, 8.5, True),  # 距门槛 15%
+        ("breakout", None, 10.0, 7.0, False),  # 距门槛 30%
+        ("ma_cross", None, 10.0, 8.5, True),
+        ("ma_cross", None, 10.0, 7.0, False),
+    ],
+)
+def test_near_threshold_boundary(type, threshold, value, price, expected):
+    rule = make_rule(type, 10, threshold)
+    signal = rule_eval.Signal(
+        satisfied=False, value=value, threshold=threshold, price=price
+    )
+
+    assert rule_eval.is_near(rule, signal) is expected
+
+
+def test_near_threshold_ignores_triggered_signal():
+    rule = make_rule("oversold", 10, 20.0)
+    signal = rule_eval.Signal(satisfied=True, value=25.0, threshold=20.0, price=7.5)
+
+    assert rule_eval.is_near(rule, signal) is False
+
+
 def test_transitions_start_index_drops_earlier_events():
     rule = make_rule("ma_cross", 2)
     bars = adj_bars([10, 10, 10, 12, 13])

@@ -17,14 +17,12 @@ from typing import Iterable
 from app.config import Settings
 from app.services.notify import Notifier, NullNotifier
 from app.storage import rule_store
-from app.storage.meta_db import Rule, connect
+from app.storage.meta_db import MA_RULE_TYPES, Rule, connect
 from app.storage.parquet_store import ParquetStore
-from app.storage.schema import IngestError, normalize_code
+from app.storage.schema import normalize_code
 from app.storage.watchlist_store import load_watchlist
 
 logger = logging.getLogger(__name__)
-
-MA_TYPES = ("ma_cross",)
 
 
 @dataclass(frozen=True)
@@ -56,7 +54,7 @@ def trading_bars(bars: Iterable[dict]) -> list[dict]:
 
 def first_index(rule: Rule) -> int:
     """该规则能算出结果的最早下标。回放起点就取这里，不必回溯到数据起点。"""
-    return rule.window - 1 if rule.type in MA_TYPES else rule.window
+    return rule.window - 1 if rule.type in MA_RULE_TYPES else rule.window
 
 
 def signal_at(rule: Rule, bars: list[dict], index: int) -> Signal | None:
@@ -71,7 +69,7 @@ def signal_at(rule: Rule, bars: list[dict], index: int) -> Signal | None:
         return None
 
     window = rule.window
-    if rule.type in MA_TYPES:
+    if rule.type in MA_RULE_TYPES:
         window_bars = bars[index - window + 1 : index + 1]
         mean = fmean(bar["adjClose"] for bar in window_bars)
         return Signal(satisfied=close > mean, value=round(mean, 4), threshold=None, price=close)
@@ -109,6 +107,33 @@ def signal_at(rule: Rule, bars: list[dict], index: int) -> Signal | None:
     return None
 
 
+def next_event(state: str | None, signal: Signal) -> str | None:
+    """当前状态 + 当日判定 → 该记录的事件；状态没变则返回 None。
+
+    起点视为「未触发」，所以第一次满足就是 enter，第一次不满足不产生 exit。
+    """
+    if signal.satisfied:
+        return None if state == "enter" else "enter"
+    return "exit" if state == "enter" else None
+
+
+def is_near(rule: Rule, signal: Signal | None) -> bool:
+    """未触发但与阈值的差距在 20% 以内（票面「接近阈值」），供 09 日报使用，本票不展示。"""
+    if signal is None or signal.satisfied or signal.value is None:
+        return False
+    threshold = rule.threshold or 0.0
+    if rule.type == "oversold":
+        return signal.value >= threshold * 0.8
+    if rule.type == "volume_surge":
+        return signal.value >= threshold * 0.8
+    if rule.type == "volume_shrink":
+        return signal.value <= threshold * 1.2
+    if rule.type in ("breakout", "ma_cross"):
+        level = signal.value
+        return level > 0 and (level - (signal.price or 0.0)) / level <= 0.2
+    return False
+
+
 def transitions(
     rule: Rule, bars: list[dict], *, start_index: int | None = None, end_index: int | None = None
 ) -> list[Transition]:
@@ -125,15 +150,12 @@ def transitions(
         signal = signal_at(rule, bars, index)
         if signal is None:
             continue
-        desired = "enter" if signal.satisfied else "exit"
-        if desired == state:
+        event = next_event(state, signal)
+        if event is None:
             continue
-        if state is None and desired == "exit":
-            state = "exit"
-            continue
-        state = desired
+        state = event
         events.append(
-            Transition(index=index, date=bars[index]["date"], event=desired, signal=signal)
+            Transition(index=index, date=bars[index]["date"], event=event, signal=signal)
         )
     return events
 
@@ -165,10 +187,17 @@ def evaluate_day(
         entered = 0
         exited = 0
 
-        debug_code = normalize_code(code) if code else None
+        debug_code = normalize_code(code) if code else None  # 非法代码抛 IngestError，由路由转 400
 
         for rule in rules:
-            codes = [debug_code] if debug_code else _scope_codes(settings, rule, scope_cache)
+            if debug_code:
+                # 调试代码只覆盖「全部自选」；指定单只的规则仍只算自己那只
+                if rule.scope == "single" and rule.scope_code != debug_code:
+                    continue
+                codes = [debug_code]
+            else:
+                codes = _scope_codes(settings, rule, scope_cache)
+
             for item in codes:
                 if item not in series_cache:
                     series_cache[item] = trading_bars(store.series(item, None, trade_date))
@@ -180,24 +209,24 @@ def evaluate_day(
                     continue
                 evaluated += 1
 
-                desired = "enter" if signal.satisfied else "exit"
                 state = rule_store.current_state(conn, item, rule.id)
-                if state == desired or (state is None and desired == "exit"):
+                event = next_event(state, signal)
+                if event is None:
                     continue
                 inserted = rule_store.record_event(
                     conn,
                     code=item,
                     rule_id=rule.id,
                     trade_date=trade_date,
-                    event=desired,
+                    event=event,
                     value=signal.value,
                     threshold=signal.threshold,
                     price=signal.price,
                     timezone=settings.timezone,
                 )
                 if inserted:
-                    entered += 1 if desired == "enter" else 0
-                    exited += 1 if desired == "exit" else 0
+                    entered += 1 if event == "enter" else 0
+                    exited += 1 if event == "exit" else 0
 
         push = _push_pending(conn, settings, trade_date, notifier)
         return {
@@ -250,7 +279,12 @@ def _push_pending(conn, settings: Settings, trade_date: str, notifier: Notifier)
 
 
 def replay_rule(settings: Settings, rule_id: int) -> dict:
-    """静默回放：从该规则能算出结果的最早一天走到启用前一日，只写记录不推送。"""
+    """静默回放：从该规则能算出结果的最早一天走到启用前一日，只写记录不推送。
+
+    起点必须早到足以看见「由假变真」的那一刻：若只从「距今 N 个交易日」起算，而条件
+    在整段窗口内一直成立，回放就看不到进入点，触发态会被误判为未触发，次日求值立刻
+    产生一条假预警。代价是回放覆盖全历史，「历史触发次数」按 ADR 0007 的口径统计。
+    """
     store = ParquetStore(settings.parquet_dir)
     conn = connect(settings.meta_dir, settings.timezone)
     try:
@@ -272,22 +306,22 @@ def replay_rule(settings: Settings, rule_id: int) -> dict:
             if end_index < first_index(rule):
                 continue
             touched += 1
-            for item in transitions(rule, bars, end_index=end_index):
+            for transition in transitions(rule, bars, end_index=end_index):
                 inserted = rule_store.record_event(
                     conn,
                     code=code,
                     rule_id=rule.id,
-                    trade_date=item.date,
-                    event=item.event,
-                    value=item.signal.value,
-                    threshold=item.signal.threshold,
-                    price=item.signal.price,
+                    trade_date=transition.date,
+                    event=transition.event,
+                    value=transition.signal.value,
+                    threshold=transition.signal.threshold,
+                    price=transition.signal.price,
                     replayed=True,
                     timezone=settings.timezone,
                 )
                 if inserted:
-                    entered += 1 if item.event == "enter" else 0
-                    exited += 1 if item.event == "exit" else 0
+                    entered += 1 if transition.event == "enter" else 0
+                    exited += 1 if transition.event == "exit" else 0
 
         return {
             "ruleId": rule.id,
@@ -297,3 +331,37 @@ def replay_rule(settings: Settings, rule_id: int) -> dict:
         }
     finally:
         conn.close()
+
+
+def history_for(settings: Settings, rule_id: int, code: str) -> dict:
+    """某标的某规则的触发历史：何时进入触发态、何时解除。"""
+    normalized = normalize_code(code)
+    conn = connect(settings.meta_dir, settings.timezone)
+    try:
+        rule = rule_store.get_rule(conn, rule_id)
+        if rule is None:
+            raise LookupError(f"规则不存在：{rule_id}")
+        items = [
+            {
+                "tradeDate": row["trade_date"],
+                "event": row["event"],
+                "value": row["value"],
+                "threshold": row["threshold"],
+                "price": row["price"],
+                "reason": row["reason"],
+                "replayed": bool(row["replayed"]),
+                "pushedAt": row["pushed_at"],
+                "readAt": row["read_at"],
+            }
+            for row in rule_store.history(conn, rule_id, normalized)
+        ]
+        state = rule_store.current_state(conn, normalized, rule_id)
+    finally:
+        conn.close()
+    return {
+        "rule": rule.as_dict(),
+        "code": normalized,
+        "state": state,
+        "items": items,
+        "count": len(items),
+    }

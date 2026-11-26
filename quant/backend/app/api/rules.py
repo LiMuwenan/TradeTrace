@@ -12,8 +12,7 @@ from pydantic import BaseModel
 
 from app.schemas import ok
 from app.services import rule_eval
-from app.storage import meta_db, rule_store
-from app.storage.schema import IngestError, normalize_code
+from app.storage.schema import IngestError
 
 router = APIRouter(tags=["rules"])
 
@@ -28,12 +27,15 @@ class EvaluateRequest(BaseModel):
 @router.post("/rules/evaluate")
 def evaluate(request: Request, payload: EvaluateRequest) -> dict:
     trade_date = _valid_date(payload.date, "date")
-    summary = rule_eval.evaluate_day(
-        request.app.state.settings,
-        trade_date,
-        code=payload.code,
-        notifier=request.app.state.notifier,
-    )
+    try:
+        summary = rule_eval.evaluate_day(
+            request.app.state.settings,
+            trade_date,
+            code=payload.code,
+            notifier=request.app.state.notifier,
+        )
+    except IngestError as exc:
+        raise HTTPException(status_code=400, detail=CODE_FORMAT_MESSAGE) from exc
     return ok(summary)
 
 
@@ -49,36 +51,13 @@ def replay(request: Request, rule_id: int) -> dict:
 @router.get("/rules/{rule_id}/history")
 def rule_history(request: Request, rule_id: int, code: str) -> dict:
     """某标的某规则的触发历史：何时进入触发态、何时解除。"""
-    settings = request.app.state.settings
     try:
-        normalized = normalize_code(code)
+        data = rule_eval.history_for(request.app.state.settings, rule_id, code)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except IngestError as exc:
         raise HTTPException(status_code=400, detail=CODE_FORMAT_MESSAGE) from exc
-
-    conn = meta_db.connect(settings.meta_dir, settings.timezone)
-    try:
-        rule = rule_store.get_rule(conn, rule_id)
-        if rule is None:
-            raise HTTPException(status_code=404, detail=f"规则不存在：{rule_id}")
-        items = [
-            {
-                "tradeDate": row["trade_date"],
-                "event": row["event"],
-                "value": row["value"],
-                "threshold": row["threshold"],
-                "price": row["price"],
-                "reason": row["reason"],
-                "replayed": bool(row["replayed"]),
-                "pushedAt": row["pushed_at"],
-                "readAt": row["read_at"],
-            }
-            for row in rule_store.history(conn, rule_id, normalized)
-        ]
-        state = rule_store.current_state(conn, normalized, rule_id)
-    finally:
-        conn.close()
-
-    return ok({"rule": rule.as_dict(), "code": normalized, "state": state, "items": items, "count": len(items)})
+    return ok(data)
 
 
 def _valid_date(value: str, field: str) -> str:

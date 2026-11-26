@@ -11,6 +11,9 @@ from zoneinfo import ZoneInfo
 DB_FILENAME = "meta.db"
 
 RULE_TYPES = ("breakout", "oversold", "volume_surge", "volume_shrink", "ma_cross")
+# 规则类型的分类口径只在这里定义一次，校验与求值都从这里取
+THRESHOLD_RULE_TYPES = ("oversold", "volume_surge", "volume_shrink")
+MA_RULE_TYPES = ("ma_cross",)
 SCOPES = ("watchlist", "single")
 
 SCHEMA = """
@@ -42,7 +45,9 @@ CREATE TABLE IF NOT EXISTS rule_state_event (
     push_channel TEXT,
     read_at      TEXT,
     created_at   TEXT    NOT NULL,
-    UNIQUE (code, rule_id, trade_date)
+    -- 人工收尾（停用、改参数）的 exit 可能与当日那条 enter 同为一天，
+    -- 因此唯一键包含 event；单次求值仍只产出一条事件（ADR 0007 修订说明）
+    UNIQUE (code, rule_id, trade_date, event)
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_code_rule

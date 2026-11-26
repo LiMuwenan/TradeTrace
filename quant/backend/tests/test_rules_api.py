@@ -252,6 +252,28 @@ def test_invalid_date_is_400(local_settings):
     assert response.status_code == 400
 
 
+def test_invalid_debug_code_is_400(local_settings):
+    response = make_client(local_settings).post(
+        "/api/v1/rules/evaluate", json={"date": "2026-06-11", "code": "abc"}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"code": 400, "message": "标的代码格式应为 sh.600000 / sz.000001"}
+
+
+def test_debug_code_does_not_override_single_scope_rule(env):
+    settings, rows = env
+    create_rule(
+        settings, type="ma_cross", name="单只", scope="single", scope_code=CODE, window=2
+    )
+    client = make_client(settings)
+
+    summary = evaluate(client, rows[-1]["date"], code="sz.000001")
+
+    assert summary["evaluated"] == 0
+    assert events(settings) == []
+
+
 def test_scope_single_rule_only_touches_its_code(local_settings, tmp_path):
     add_to_watchlist(local_settings)
     rows = import_series(local_settings, tmp_path, [10, 10, 10, 12])

@@ -25,5 +25,5 @@ blocked_by: [05]
 - 规则与预警记录的关系：修改规则不追溯历史预警；历史预警保留当时的快照值
 - **规则定义落 `{meta_dir}/meta.db` 的 `alert_rule` 表**（ADR `0007-rule-state-event-stream.md`），与触发态变更记录同库同文件
 - **新建并启用规则时**：必须先调 05 的 `POST /api/v1/rules/{id}/replay` 做静默回放，回放完成后才允许该规则参与每日求值；回放期间界面要给出「正在计算历史状态」的明确提示，不能静默卡住
-- **修改阈值/时间窗、停用规则时**：向 `rule_state_event` 写一条 `exit` 收尾，`reason` 分别为 `rule_changed` / `rule_disabled`，新参数从次日求值起算
+- **修改阈值/时间窗、停用规则时**：调用 05 提供的 `rule_store.close_states(rule_id, reason=...)` 写一条 `exit` 收尾，`reason` 分别为 `rule_changed` / `rule_disabled`，新参数从次日求值起算
 - **本票上线时须删除 05 里的配置文件种子导入路径**（见 05 备注），规则从此只有一个写入口：本页表单

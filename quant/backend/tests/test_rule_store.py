@@ -65,8 +65,7 @@ def test_invalid_rule_is_rejected(tmp_path, kwargs, message):
 def test_list_rules_filters_disabled(tmp_path):
     conn = _conn(tmp_path)
     rule_store.create_rule(conn, type="breakout", name="a", window=60)
-    stopped = rule_store.create_rule(conn, type="ma_cross", name="b", window=20)
-    rule_store.set_enabled(conn, stopped.id, False)
+    rule_store.create_rule(conn, type="ma_cross", name="b", window=20, enabled=False)
 
     assert [rule.name for rule in rule_store.list_rules(conn)] == ["a", "b"]
     assert [rule.name for rule in rule_store.list_rules(conn, enabled_only=True)] == ["a"]
@@ -103,6 +102,28 @@ def test_current_state_follows_last_event(tmp_path):
         conn, code="sh.600000", rule_id=rule.id, trade_date="2026-06-16", event="exit"
     )
     assert rule_store.current_state(conn, "sh.600000", rule.id) == "exit"
+
+
+def test_close_states_writes_reasoned_exit_for_entered_codes(tmp_path):
+    conn = _conn(tmp_path)
+    rule = rule_store.create_rule(conn, type="ma_cross", name="ma20", window=20)
+    rule_store.record_event(
+        conn, code="sh.600000", rule_id=rule.id, trade_date="2026-06-15", event="enter"
+    )
+    rule_store.record_event(
+        conn, code="sz.000001", rule_id=rule.id, trade_date="2026-06-15", event="enter"
+    )
+    rule_store.record_event(
+        conn, code="sz.000001", rule_id=rule.id, trade_date="2026-06-16", event="exit"
+    )
+
+    closed = rule_store.close_states(conn, rule.id, reason="rule_disabled")
+
+    assert closed == ["sh.600000"]
+    assert rule_store.current_state(conn, "sh.600000", rule.id) == "exit"
+    last = rule_store.last_event(conn, "sh.600000", rule.id)
+    assert last["reason"] == "rule_disabled"
+    assert last["trade_date"] == "2026-06-15"  # 与当日 enter 同日，靠唯一键含 event 才写得进去
 
 
 def test_seed_rules_are_imported_from_toml(tmp_path):

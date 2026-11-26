@@ -12,14 +12,13 @@ from pathlib import Path
 from app.storage.meta_db import (
     RULE_TYPES,
     SCOPES,
+    THRESHOLD_RULE_TYPES,
     Rule,
     RuleValidationError,
     _row_to_rule,
     now_iso,
 )
 from app.storage.schema import IngestError, normalize_code
-
-THRESHOLD_RULES = ("oversold", "volume_surge", "volume_shrink")
 
 
 def validate_rule(
@@ -53,7 +52,7 @@ def validate_rule(
     if window < 2:
         raise RuleValidationError(f"时间窗不得小于 2，当前为 {window}")
 
-    if type in THRESHOLD_RULES:
+    if type in THRESHOLD_RULE_TYPES:
         if threshold is None:
             raise RuleValidationError(f"规则类型 {type} 必须给出阈值")
         threshold = float(threshold)
@@ -112,9 +111,41 @@ def list_rules(conn: sqlite3.Connection, *, enabled_only: bool = False) -> list[
     return [_row_to_rule(row) for row in conn.execute(sql).fetchall()]
 
 
-def set_enabled(conn: sqlite3.Connection, rule_id: int, enabled: bool) -> Rule | None:
-    conn.execute("UPDATE alert_rule SET enabled = ? WHERE id = ?", (1 if enabled else 0, rule_id))
-    return get_rule(conn, rule_id)
+def close_states(
+    conn: sqlite3.Connection, rule_id: int, *, reason: str, timezone: str = "Asia/Shanghai"
+) -> list[str]:
+    """把某规则当前所有处于触发态的标的收尾：各写一条带原因的 exit（ADR 0007 第 7 条）。
+
+    规则改参数或停用时由 06 调用，避免旧口径的「满足」状态被新参数继续沿用。
+    返回被收尾的标的代码。
+    """
+    rows = conn.execute(
+        """
+        SELECT code FROM rule_state_event
+        WHERE rule_id = ? AND event = 'enter'
+          AND NOT EXISTS (
+              SELECT 1 FROM rule_state_event newer
+              WHERE newer.code = rule_state_event.code
+                AND newer.rule_id = rule_state_event.rule_id
+                AND (newer.trade_date, newer.id) > (rule_state_event.trade_date, rule_state_event.id)
+          )
+        """,
+        (rule_id,),
+    ).fetchall()
+    closed: list[str] = []
+    for row in rows:
+        code = row["code"]
+        if record_event(
+            conn,
+            code=code,
+            rule_id=rule_id,
+            trade_date=last_event(conn, code, rule_id)["trade_date"],
+            event="exit",
+            reason=reason,
+            timezone=timezone,
+        ):
+            closed.append(code)
+    return closed
 
 
 def import_seed_rules(conn: sqlite3.Connection, path: Path | str, timezone: str = "Asia/Shanghai") -> list[Rule]:
