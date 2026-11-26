@@ -41,7 +41,7 @@ backend/app/services/ 业务逻辑（取数、规则求值、通知、日报、�
 backend/app/storage/  Parquet 读写与分区
 backend/tests/        与 app 平行的测试
 web/src/api/          接口封装，页面不直接写 fetch
-web/src/router.js     路由表：/、/dashboard、/alerts、/alerts/:id、/pipeline、/settings/notification
+web/src/router.js     路由表：/、/dashboard、/rules、/stocks/:code、/reports、/reports/:date、/alerts、/alerts/:id、/pipeline、/settings/notification
 web/src/components/ui/ shadcn 风格基础组件（Button / Card 系列 / Input / Badge）
 web/src/lib/utils.js  cn()：clsx + tailwind-merge 的 class 合并
 web/tailwind.config.js 语义色 token 映射（见「Web 页面风格」）
