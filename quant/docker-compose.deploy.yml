@@ -33,11 +33,11 @@ services:
       TZ: Asia/Shanghai
     volumes:
       # 原始 CSV：导入与每日增量取数都会写
-      - "${RAW_DIR_HOST:-G:/各种资料/量化数据/data/raw}:/data/raw"
+      - "${RAW_DIR_HOST:-/home/lianghua/data/raw}:/data/raw"
       # 派生 Parquet：DuckDB 直读，重建也写这里
-      - "${PARQUET_DIR_HOST:-G:/各种资料/量化数据/data/market}:/data/parquet"
+      - "${PARQUET_DIR_HOST:-/home/lianghua/data/market}:/data/parquet"
       # 用户记录库 meta.db：规则、预警、通知配置、日报快照，丢了找不回
-      - "${META_DIR_HOST:-F:/Project/TradeTrace/quant/data/meta}:/data/meta"
+      - "${META_DIR_HOST:-/home/lianghua/data/meta}:/data/meta"
     restart: unless-stopped
     # Windows 的 bind mount 一般可直接写；若启动报「xxx 不可写」，
     # 先确认 Docker Desktop 已共享该盘符，仍不行再临时打开下面这行（不推荐常开）。
