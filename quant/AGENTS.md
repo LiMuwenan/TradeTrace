@@ -34,7 +34,10 @@ data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_f
 data/parquet/store_state.json     因子基准与最近一次导入结果
 data/meta/watchlist.json          自选清单（用户数据，不可从行情重建）
 data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单）
+data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 的行）
 ```
+
+`meta.db` 只存用户记录，不存行情；行情仍在 Parquet。它是嵌入式单文件库，不是独立数据库服务。注意与 `lianghua/data/meta.db` 同名但**完全无关**，禁止跨项目读写（见仓库根 `AGENTS.md`）。
 
 所有**行情数据**入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开行情写路径。
 实时抓取到的数据同样先归档成上面两份 CSV，再走同一条导入路径。
