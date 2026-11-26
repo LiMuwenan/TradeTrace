@@ -28,6 +28,7 @@ def test_health_reports_version_and_dirs(settings):
     assert data["timezone"] == "Asia/Shanghai"
     assert data["parquetDir"].endswith("parquet")
     assert data["rawDir"].endswith("raw")
+    assert data["metaDir"].endswith("meta")
     assert data["serverTime"]
 
 

@@ -23,5 +23,6 @@ def health(request: Request) -> dict:
             "serverTime": now.isoformat(timespec="seconds"),
             "parquetDir": str(settings.parquet_dir),
             "rawDir": str(settings.raw_dir),
+            "metaDir": str(settings.meta_dir),
         }
     )

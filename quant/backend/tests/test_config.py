@@ -33,6 +33,35 @@ def test_absolute_dirs_are_kept(tmp_path):
     assert settings.parquet_dir == absolute
 
 
+def test_env_overrides_paths_and_port(config_path, monkeypatch, tmp_path):
+    monkeypatch.setenv("QUANT_HOST", "0.0.0.0")
+    monkeypatch.setenv("QUANT_PORT", "9000")
+    monkeypatch.setenv("QUANT_RAW_DIR", str(tmp_path / "mnt" / "raw"))
+    monkeypatch.setenv("QUANT_PARQUET_DIR", str(tmp_path / "mnt" / "parquet"))
+    monkeypatch.setenv("QUANT_META_DIR", str(tmp_path / "mnt" / "meta"))
+
+    settings = load_settings(config_path)
+
+    assert settings.host == "0.0.0.0"
+    assert settings.port == 9000
+    assert settings.raw_dir == (tmp_path / "mnt" / "raw").resolve()
+    assert settings.parquet_dir == (tmp_path / "mnt" / "parquet").resolve()
+    assert settings.meta_dir == (tmp_path / "mnt" / "meta").resolve()
+
+
+def test_empty_env_falls_back_to_file(config_path, monkeypatch):
+    monkeypatch.setenv("QUANT_RAW_DIR", "  ")
+
+    assert load_settings(config_path).raw_dir == (PROJECT_ROOT / "data/raw").resolve()
+
+
+def test_invalid_env_port_is_rejected(config_path, monkeypatch):
+    monkeypatch.setenv("QUANT_PORT", "8000abc")
+
+    with pytest.raises(ValueError, match="QUANT_PORT"):
+        load_settings(config_path)
+
+
 def test_missing_file_reports_actionable_error(tmp_path):
     missing = tmp_path / "nope.toml"
 

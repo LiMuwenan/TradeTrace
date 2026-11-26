@@ -5,6 +5,10 @@
 1. 环境变量 QUANT_CONFIG 指定的路径
 2. 默认路径 quant/config/config.toml
 
+字段取值的优先级：环境变量 > 配置文件 > 代码默认值。容器部署时挂载点、
+监听端口随宿主机变化，用 QUANT_HOST / QUANT_PORT / QUANT_RAW_DIR /
+QUANT_PARQUET_DIR / QUANT_META_DIR 覆盖，不必把宿主机路径写进镜像。
+
 数据目录之类的相对路径一律相对 quant 项目根解析，不受启动时工作目录影响。
 """
 import os
@@ -76,7 +80,7 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
     app = raw.get("app") or {}
     schedule = raw.get("schedule") or {}
 
-    port = int(server.get("port", 8000))
+    port = _int_from_env("QUANT_PORT", server.get("port", 8000))
     if not 1 <= port <= 65535:
         raise ValueError(f"server.port 非法：{port}，应在 1-65535 之间")
 
@@ -97,12 +101,14 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
 
     return Settings(
         config_path=path,
-        host=str(server.get("host", "127.0.0.1")),
+        host=_env("QUANT_HOST") or str(server.get("host", "127.0.0.1")),
         port=port,
-        raw_dir=_resolve_dir(data.get("raw_dir", "data/raw")),
-        parquet_dir=_resolve_dir(data.get("parquet_dir", "data/parquet")),
+        raw_dir=_resolve_dir(_env("QUANT_RAW_DIR") or data.get("raw_dir", "data/raw")),
+        parquet_dir=_resolve_dir(
+            _env("QUANT_PARQUET_DIR") or data.get("parquet_dir", "data/parquet")
+        ),
         # 用户数据与字典缓存（自选清单、股票名称），与可重建的 Parquet 分开
-        meta_dir=_resolve_dir(data.get("meta_dir", "data/meta")),
+        meta_dir=_resolve_dir(_env("QUANT_META_DIR") or data.get("meta_dir", "data/meta")),
         timezone=timezone,
         log_level=str(app.get("log_level", "INFO")).upper(),
         cors_origins=cors_origins,
@@ -119,6 +125,24 @@ def _validate_clock(value: str) -> None:
     hour, minute = int(match.group(1)), int(match.group(2))
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         raise ValueError(f"schedule.time 超出范围：{value}")
+
+
+def _env(name: str) -> str | None:
+    """读取非空环境变量。空串按未设置处理，避免 compose 里的空值把路径清空。"""
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    return value.strip() or None
+
+
+def _int_from_env(name: str, default: object) -> int:
+    raw = _env(name)
+    if raw is None:
+        return int(default)
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} 应为整数，当前为 {raw!r}") from exc
 
 
 def _resolve_dir(value: str) -> Path:
