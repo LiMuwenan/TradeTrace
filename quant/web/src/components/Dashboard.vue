@@ -265,7 +265,7 @@ onMounted(() => {
             <span v-if="!sidebarCollapsed" class="flex-1 truncate">{{ item.label }}</span>
             <span
               v-if="item.to === '/alerts' && unreadAlerts && !sidebarCollapsed"
-              class="rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-700"
+              class="rounded-full bg-warning-soft px-1.5 text-[11px] font-medium text-warning"
             >{{ unreadAlerts }}</span>
             <ChevronRight v-if="!sidebarCollapsed && item.leave" class="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -333,7 +333,7 @@ onMounted(() => {
           </Card>
         </div>
 
-        <p v-if="error" class="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ error }}</p>
+        <p v-if="error" class="mb-5 rounded-lg border border-destructive bg-background px-4 py-3 text-sm text-destructive">{{ error }}</p>
 
         <section id="health" class="mb-6 scroll-mt-20">
           <div class="mb-3 flex items-center justify-between">
@@ -365,7 +365,7 @@ onMounted(() => {
                 <Button type="submit" :disabled="searching || !keyword.trim()">{{ searching ? '搜索中…' : '搜索' }}</Button>
               </form>
 
-              <p v-if="!namesAvailable" class="mt-3 text-xs text-amber-700">名称字典暂不可用，只能按代码搜索。</p>
+              <p v-if="!namesAvailable" class="mt-3 text-xs text-warning">名称字典暂不可用，只能按代码搜索。</p>
 
               <ul v-if="searchResults.length" class="mt-3 divide-y overflow-hidden rounded-lg border">
                 <li v-for="item in searchResults" :key="item.code" class="flex items-center gap-3 px-3 py-2.5">
@@ -400,7 +400,7 @@ onMounted(() => {
                 还没有自选标的。用上方搜索按代码或名称添加，例如 <code class="font-mono">600519</code> 或 <code class="font-mono">茅台</code>。
               </p>
 
-              <p v-if="watchlistError" class="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ watchlistError }}</p>
+              <p v-if="watchlistError" class="mt-3 rounded-lg border border-destructive bg-background px-4 py-3 text-sm text-destructive">{{ watchlistError }}</p>
             </CardContent>
           </Card>
         </section>

@@ -52,6 +52,14 @@ export default {
         up: 'hsl(var(--up))',
         down: 'hsl(var(--down))',
         flat: 'hsl(var(--flat))',
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          soft: 'hsl(var(--success-soft))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          soft: 'hsl(var(--warning-soft))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

@@ -79,8 +79,8 @@ const rows = [
                 <p class="text-sm font-semibold">已归档标的</p>
                 <p class="mt-0.5 text-xs text-muted-foreground">样例展示 · 与实际数据无关</p>
               </div>
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" /> 就绪
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">
+                <span class="h-1.5 w-1.5 rounded-full bg-success" /> 就绪
               </span>
             </div>
             <div class="divide-y">

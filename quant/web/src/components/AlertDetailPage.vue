@@ -86,7 +86,7 @@ watch(() => props.id, load, { immediate: true })
       <ArrowLeft class="h-3.5 w-3.5" /> 返回预警列表
     </Button>
 
-    <p v-if="error" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+    <p v-if="error" class="rounded-lg border border-destructive bg-background px-3 py-2 text-sm text-destructive">
       {{ error }}
     </p>
     <div v-else-if="loading && !data" class="p-10 text-center text-sm text-muted-foreground">加载中…</div>
@@ -129,7 +129,7 @@ watch(() => props.id, load, { immediate: true })
 
         <Card>
           <CardHeader>
-            <CardTitle>规则参数</CardTitle>
+            <CardTitle>规则当前参数</CardTitle>
           </CardHeader>
           <CardContent>
             <dl v-if="rule" class="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -139,6 +139,9 @@ watch(() => props.id, load, { immediate: true })
               </div>
             </dl>
             <p v-else class="text-sm text-muted-foreground">该规则已被删除，仅保留触发时的快照值。</p>
+            <p v-if="rule" class="mt-4 text-xs text-muted-foreground">
+              这里是规则现在的设置；触发当时的时间窗与阈值见左侧「触发快照」。
+            </p>
           </CardContent>
         </Card>
       </div>

@@ -24,12 +24,13 @@ export function metricText(alert) {
   if (!alert) return '—'
   const value = num(alert.value)
   const threshold = num(alert.threshold)
+  const window = alert.window
   if (alert.ruleType === 'oversold') return `回落 ${value}%（阈值 ${threshold}%）`
   if (alert.ruleType === 'volume_surge' || alert.ruleType === 'volume_shrink') {
     return `量比 ${value}（阈值 ${threshold}）`
   }
-  if (alert.ruleType === 'ma_cross') return `均线 ${value}`
-  if (alert.ruleType === 'breakout') return `区间最高 ${value}`
+  if (alert.ruleType === 'ma_cross') return window ? `均线 ${value}（前 ${window} 日）` : `均线 ${value}`
+  if (alert.ruleType === 'breakout') return window ? `前 ${window} 日最高 ${value}` : `区间最高 ${value}`
   return `触发值 ${value}`
 }
 

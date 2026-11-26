@@ -34,6 +34,9 @@ const form = reactive({
 })
 
 const logs = ref([])
+const logTotal = ref(0)
+const logPage = ref(1)
+const LOG_PAGE_SIZE = 10
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -63,17 +66,27 @@ function fill(data) {
   form.smtpPassword = ''
 }
 
+async function loadLogs(reset = false) {
+  if (reset) logPage.value = 1
+  const log = await fetchNotificationLog({ page: logPage.value, pageSize: LOG_PAGE_SIZE })
+  logs.value = reset ? log.items : [...logs.value, ...log.items]
+  logTotal.value = log.total
+}
+
+function moreLogs() {
+  logPage.value += 1
+  loadLogs().catch((err) => {
+    error.value = err.message
+  })
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [settings, log] = await Promise.all([
-      fetchNotificationSettings(),
-      fetchNotificationLog({ pageSize: 10 }),
-    ])
+    const [settings] = await Promise.all([fetchNotificationSettings(), loadLogs(true)])
     config.value = settings
     fill(settings)
-    logs.value = log.items
   } catch (err) {
     error.value = err.message
   } finally {
@@ -134,8 +147,7 @@ async function sendTest() {
   testResult.value = null
   try {
     testResult.value = await sendTestNotification()
-    const log = await fetchNotificationLog({ pageSize: 10 })
-    logs.value = log.items
+    await loadLogs(true)
   } catch (err) {
     testResult.value = { ok: false, channel: null, error: err.message }
   } finally {
@@ -155,7 +167,7 @@ onMounted(load)
       </p>
     </div>
 
-    <p v-if="error" class="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+    <p v-if="error" class="mb-4 rounded-lg border border-destructive bg-background px-3 py-2 text-sm text-destructive">
       {{ error }}
     </p>
 
@@ -191,7 +203,7 @@ onMounted(load)
               </div>
             </div>
 
-            <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p class="rounded-lg border border-warning bg-warning-soft px-3 py-2 text-xs text-warning">
               主题名等同于密码：任何知道它的人都能订阅你的预警。请用足够长的随机串，不要用 <code class="font-mono">stock</code> 这类可猜的词；怀疑泄露就换一个。
             </p>
 
@@ -323,7 +335,7 @@ onMounted(load)
           <Button variant="outline" :disabled="testing" @click="sendTest">
             <Send class="h-3.5 w-3.5" /> {{ testing ? '发送中…' : '发送测试通知' }}
           </Button>
-          <span v-if="saved" class="flex items-center gap-1 text-xs text-emerald-700">
+          <span v-if="saved" class="flex items-center gap-1 text-xs text-success">
             <CheckCircle2 class="h-3.5 w-3.5" /> {{ saved }}
           </span>
         </div>
@@ -332,8 +344,8 @@ onMounted(load)
           v-if="testResult"
           class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
           :class="testResult.ok
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-            : 'border-destructive/30 bg-destructive/5 text-destructive'"
+            ? 'border-success bg-success-soft text-success'
+            : 'border-destructive bg-background text-destructive'"
         >
           <CheckCircle2 v-if="testResult.ok" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <XCircle v-else class="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -345,9 +357,14 @@ onMounted(load)
       <div class="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>今日用量</CardTitle>
+            <CardTitle>当日用量</CardTitle>
+            <CardDescription>按交易日统计，与上限口径一致。</CardDescription>
           </CardHeader>
           <CardContent class="space-y-2 text-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-muted-foreground">交易日</span>
+              <span class="font-mono">{{ usage?.date || '—' }}</span>
+            </div>
             <div class="flex items-center justify-between">
               <span class="text-muted-foreground">已尝试投递</span>
               <span class="font-mono">{{ usageText }}</span>
@@ -359,7 +376,7 @@ onMounted(load)
                 <Badge :variant="config?.emailReady ? 'success' : 'secondary'">邮件</Badge>
               </span>
             </div>
-            <p v-if="!config?.configured" class="text-xs text-amber-700">
+            <p v-if="!config?.configured" class="text-xs text-warning">
               至少配置一条通道后，预警才会被投递；未配置时求值只落库。
             </p>
           </CardContent>
@@ -388,6 +405,13 @@ onMounted(load)
                 <p v-if="item.detail" class="mt-1 text-[11px] text-muted-foreground">{{ item.detail }}</p>
               </li>
             </ul>
+            <Button
+              v-if="logs.length < logTotal"
+              variant="outline"
+              size="sm"
+              class="w-full"
+              @click="moreLogs"
+            >加载更多（{{ logs.length }} / {{ logTotal }}）</Button>
           </CardContent>
         </Card>
       </div>

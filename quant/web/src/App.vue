@@ -7,10 +7,6 @@ const router = useRouter()
 
 <template>
   <router-view v-slot="{ Component }">
-    <component
-      :is="Component"
-      @enter="router.push('/dashboard')"
-      @leave="router.push('/')"
-    />
+    <component :is="Component" @enter="router.push('/dashboard')" />
   </router-view>
 </template>

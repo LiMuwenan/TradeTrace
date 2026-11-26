@@ -108,7 +108,7 @@ onMounted(load)
       <div>
         <h1 class="text-xl font-semibold tracking-tight">预警</h1>
         <p class="mt-1 text-sm text-muted-foreground">
-          共 {{ total }} 条<span v-if="unread">，其中 <span class="font-medium text-amber-700">{{ unread }} 条未读</span></span>
+          共 {{ total }} 条<span v-if="unread">，其中 <span class="font-medium text-warning">{{ unread }} 条未读</span></span>
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -168,7 +168,7 @@ onMounted(load)
       </CardContent>
     </Card>
 
-    <p v-if="error" class="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+    <p v-if="error" class="mb-4 rounded-lg border border-destructive bg-background px-3 py-2 text-sm text-destructive">
       {{ error }}
     </p>
 
@@ -185,10 +185,10 @@ onMounted(load)
 
       <ul v-else class="divide-y">
         <li v-for="item in items" :key="item.id">
-          <div class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-accent/40">
+          <div class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-accent">
             <span
               class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-              :class="item.readAt ? 'bg-border' : 'bg-amber-500'"
+              :class="item.readAt ? 'bg-border' : 'bg-warning-soft0'"
               :title="item.readAt ? '已读' : '未读'"
             />
 
@@ -203,7 +203,7 @@ onMounted(load)
                 <span>{{ metricText(item) }}</span>
                 <span>判定价 {{ num(item.price) }}</span>
                 <span>{{ item.tradeDate }}</span>
-                <span :class="item.pushedAt ? 'text-emerald-700' : 'text-amber-700'">{{ pushStateText(item) }}</span>
+                <span :class="item.pushedAt ? 'text-success' : 'text-warning'">{{ pushStateText(item) }}</span>
               </div>
             </button>
 
