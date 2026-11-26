@@ -88,7 +88,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m app.daily_update [YYYY-MM-DD]  # 只做增量取数，不做求值与日报
 
 # 收盘流水线（取数 → 求值推送 → 日报）：定时随服务启动，无需单独进程
-# config.toml 里 schedule.enabled = true、schedule.time = "15:30"；
+# config.toml 里 schedule.enabled = true、schedule.time = "18:00"；
 # 补跑或重跑走 Web 运行记录页，或 POST /api/v1/pipeline/run
 
 # 前端（在 quant/web 下）
