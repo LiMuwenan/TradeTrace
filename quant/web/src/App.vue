@@ -1,12 +1,16 @@
 <script setup>
-import { ref } from 'vue'
-import Dashboard from './components/Dashboard.vue'
-import LandingPage from './components/LandingPage.vue'
+import { useRouter } from 'vue-router'
 
-const view = ref('landing')
+// 页面仍然只管 emit：具体跳到哪条路由由入口统一决定
+const router = useRouter()
 </script>
 
 <template>
-  <LandingPage v-if="view === 'landing'" @enter="view = 'dashboard'" />
-  <Dashboard v-else @leave="view = 'landing'" />
+  <router-view v-slot="{ Component }">
+    <component
+      :is="Component"
+      @enter="router.push('/dashboard')"
+      @leave="router.push('/')"
+    />
+  </router-view>
 </template>

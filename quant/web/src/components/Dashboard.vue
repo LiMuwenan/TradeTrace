@@ -1,13 +1,14 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot, AccordionTrigger } from 'reka-ui'
 import {
-  Activity, BarChart3, ChevronDown, ChevronRight, CircleHelp, Database,
+  Activity, BarChart3, Bell, ChevronDown, ChevronRight, CircleHelp, Database,
   ExternalLink, Home, LifeBuoy, ListFilter, Menu, PanelLeftClose, RefreshCw,
   Search, Settings2, Star,
 } from 'lucide-vue-next'
 import {
-  addToWatchlist, fetchDataStatus, fetchHealth, fetchWatchlist,
+  addToWatchlist, fetchAlerts, fetchDataStatus, fetchHealth, fetchWatchlist,
   removeFromWatchlist, searchStocks,
 } from '../api/client'
 import { cn } from '../lib/utils'
@@ -20,10 +21,11 @@ import CardHeader from './ui/CardHeader.vue'
 import CardTitle from './ui/CardTitle.vue'
 import Input from './ui/Input.vue'
 
-defineEmits(['leave'])
+const router = useRouter()
 
 const activeNav = ref('控制台')
 const sidebarCollapsed = ref(false)
+const unreadAlerts = ref(0)
 
 const health = ref(null)
 const status = ref(null)
@@ -184,6 +186,13 @@ const navGroups = [
     ],
   },
   {
+    label: '预警',
+    items: [
+      { label: '预警列表', icon: Bell, to: '/alerts' },
+      { label: '通知设置', icon: Settings2, to: '/settings/notification' },
+    ],
+  },
+  {
     label: '资源',
     items: [
       { label: '返回首页', icon: ExternalLink, leave: true },
@@ -195,9 +204,19 @@ function goTo(target) {
   document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+async function loadUnread() {
+  try {
+    const data = await fetchAlerts({ pageSize: 1, read: false })
+    unreadAlerts.value = data.unreadCount
+  } catch {
+    unreadAlerts.value = 0
+  }
+}
+
 onMounted(() => {
   load()
   loadWatchlist()
+  loadUnread()
 })
 </script>
 
@@ -240,10 +259,14 @@ onMounted(() => {
               item.active && activeNav === item.label ? 'bg-accent font-medium text-accent-foreground' : 'text-foreground/80',
               sidebarCollapsed ? 'justify-center' : ''
             ]"
-            @click="item.leave ? $emit('leave') : (item.target ? goTo(item.target) : (activeNav = item.label))"
+            @click="item.leave ? router.push('/') : (item.to ? router.push(item.to) : (item.target ? goTo(item.target) : (activeNav = item.label)))"
           >
             <component :is="item.icon" class="h-4 w-4 shrink-0" />
             <span v-if="!sidebarCollapsed" class="flex-1 truncate">{{ item.label }}</span>
+            <span
+              v-if="item.to === '/alerts' && unreadAlerts && !sidebarCollapsed"
+              class="rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-700"
+            >{{ unreadAlerts }}</span>
             <ChevronRight v-if="!sidebarCollapsed && item.leave" class="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         </div>
@@ -472,9 +495,9 @@ onMounted(() => {
         <footer class="flex flex-wrap items-center justify-between gap-3 border-t pt-6 text-xs text-muted-foreground">
           <span>Quant Platform · 本平台仅提供数据分析，不构成投资建议</span>
           <div class="flex items-center gap-4">
-            <button class="flex items-center gap-1 hover:text-foreground" @click="$emit('leave')"><Home class="h-3.5 w-3.5" /> 首页</button>
+            <button class="flex items-center gap-1 hover:text-foreground" @click="router.push('/')"><Home class="h-3.5 w-3.5" /> 首页</button>
             <button class="flex items-center gap-1 hover:text-foreground"><LifeBuoy class="h-3.5 w-3.5" /> 帮助</button>
-            <button class="flex items-center gap-1 hover:text-foreground"><Settings2 class="h-3.5 w-3.5" /> 设置</button>
+            <button class="flex items-center gap-1 hover:text-foreground" @click="router.push('/settings/notification')"><Settings2 class="h-3.5 w-3.5" /> 设置</button>
           </div>
         </footer>
       </main>

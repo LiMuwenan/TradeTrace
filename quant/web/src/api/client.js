@@ -61,3 +61,51 @@ export function removeFromWatchlist(code) {
 export function searchStocks(keyword) {
   return request(`/stocks/search?q=${encodeURIComponent(keyword)}`)
 }
+
+// --- 预警（07 号票）-------------------------------------------------------
+
+export function fetchAlerts({ read, code, ruleType, page = 1, pageSize = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (read === true || read === false) params.set('read', String(read))
+  if (code) params.set('code', code)
+  if (ruleType) params.set('ruleType', ruleType)
+  return request(`/alerts?${params.toString()}`)
+}
+
+export function fetchAlert(id) {
+  return request(`/alerts/${id}`)
+}
+
+export function setAlertRead(id, read) {
+  return request(`/alerts/${id}/read`, {
+    method: 'PATCH',
+    body: JSON.stringify({ read }),
+  })
+}
+
+export function markAllAlertsRead() {
+  return request('/alerts/read-all', { method: 'POST' })
+}
+
+// --- 通知设置（08 号票）---------------------------------------------------
+
+export function fetchNotificationSettings() {
+  return request('/settings/notification')
+}
+
+export function saveNotificationSettings(payload) {
+  return request('/settings/notification', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function sendTestNotification() {
+  return request('/settings/notification/test', { method: 'POST' })
+}
+
+export function fetchNotificationLog({ date, page = 1, pageSize = 10 } = {}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (date) params.set('date', date)
+  return request(`/notifications/log?${params.toString()}`)
+}
