@@ -151,3 +151,22 @@ export function evaluateRules(date, code) {
     body: JSON.stringify(body),
   })
 }
+
+// --- 日报（09 号票）-------------------------------------------------------
+
+export function fetchReports({ page = 1, pageSize = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  return request(`/reports?${params.toString()}`)
+}
+
+export function fetchReport(tradeDate) {
+  return request(`/reports/${encodeURIComponent(tradeDate)}`)
+}
+
+/** 生成并投递某日日报；已投递的会保留原文，不会改写。 */
+export function generateReport(tradeDate) {
+  return request('/reports/generate', {
+    method: 'POST',
+    body: JSON.stringify({ date: tradeDate }),
+  })
+}

@@ -161,7 +161,8 @@ def transitions(
     return events
 
 
-def _scope_codes(settings: Settings, rule: Rule, cache: dict[str, list[str]]) -> list[str]:
+def scope_codes(settings: Settings, rule: Rule, cache: dict[str, list[str]]) -> list[str]:
+    """规则实际覆盖的标的。日报与求值共用同一套范围判定。"""
     if rule.scope == "single":
         return [rule.scope_code] if rule.scope_code else []
     if "watchlist" not in cache:
@@ -197,7 +198,7 @@ def evaluate_day(
                     continue
                 codes = [debug_code]
             else:
-                codes = _scope_codes(settings, rule, scope_cache)
+                codes = scope_codes(settings, rule, scope_cache)
 
             for item in codes:
                 if item not in series_cache:
@@ -323,7 +324,7 @@ def replay_rule(settings: Settings, rule_id: int, *, until: str | None = None) -
 
         enabled_on = until or rule.created_at[:10]
         scope_cache: dict[str, list[str]] = {}
-        codes = _scope_codes(settings, rule, scope_cache)
+        codes = scope_codes(settings, rule, scope_cache)
         entered = 0
         exited = 0
         touched = 0

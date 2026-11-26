@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import alerts, data, health, rules, settings as settings_api, stocks, watchlist
+from app.api import alerts, data, health, reports, rules, settings as settings_api, stocks, watchlist
 from app.config import Settings, load_settings
 from app.schemas import fail
 from app.services.notify import AlertNotifier, Notifier
@@ -65,6 +65,7 @@ def create_app(
     app.include_router(stocks.router, prefix=API_PREFIX)
     app.include_router(rules.router, prefix=API_PREFIX)
     app.include_router(alerts.router, prefix=API_PREFIX)
+    app.include_router(reports.router, prefix=API_PREFIX)
     app.include_router(settings_api.router, prefix=API_PREFIX)
     return app
 

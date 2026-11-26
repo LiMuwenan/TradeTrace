@@ -53,6 +53,9 @@ class NullNotifier:
     def send(self, alert: dict) -> PushOutcome:  # pragma: no cover - 占位实现
         return PushOutcome(ok=False, error="通知通道尚未配置")
 
+    def send_report(self, report: dict) -> PushOutcome:  # pragma: no cover - 占位实现
+        return PushOutcome(ok=False, error="通知通道尚未配置")
+
 
 class AlertNotifier:
     """ntfy → 邮件 的降级链，投递结果写 `notification_log`。"""
@@ -73,20 +76,44 @@ class AlertNotifier:
         return self._config().configured
 
     def send(self, alert: dict) -> PushOutcome:
-        return self._deliver(self._config(), alert, event_id=alert.get("id"))
+        return self._deliver(
+            self._config(),
+            _alert_payload(alert),
+            event_id=alert.get("id"),
+            trade_date=str(alert.get("tradeDate") or ""),
+        )
 
     def send_test(self, alert: dict) -> PushOutcome:
         """设置页的测试通知：不占每日额度，但照常记录结果。"""
-        return self._deliver(self._config(), alert, event_id=None)
+        return self._deliver(
+            self._config(),
+            _alert_payload(alert),
+            event_id=None,
+            trade_date=str(alert.get("tradeDate") or ""),
+        )
+
+    def send_report(self, report: dict) -> PushOutcome:
+        """日报：走同一条降级链，但不占每日预警额度（它不是一条预警）。"""
+        return self._deliver(
+            self._config(),
+            {"subject": report_subject(report), "text": report_text(report)},
+            event_id=None,
+            trade_date=str(report.get("tradeDate") or ""),
+        )
 
     def _deliver(
-        self, config: notify_store.NotificationConfig, alert: dict, *, event_id: int | None
+        self,
+        config: notify_store.NotificationConfig,
+        payload: dict,
+        *,
+        event_id: int | None,
+        trade_date: str,
     ) -> PushOutcome:
         errors: list[str] = []
         if config.ntfy_ready:
             try:
-                self._ntfy_sender(config, alert)
-                self._log(alert, event_id, "ntfy", notify_store.RESULT_OK, None)
+                self._ntfy_sender(config, payload)
+                self._log(trade_date, event_id, "ntfy", notify_store.RESULT_OK, None)
                 return PushOutcome(ok=True, channel="ntfy")
             except Exception as exc:  # 网络、超时、鉴权失败一律降级
                 logger.warning("ntfy 推送失败，尝试邮件兜底：%s", exc)
@@ -94,16 +121,16 @@ class AlertNotifier:
 
         if config.email_ready:
             try:
-                self._email_sender(config, alert)
+                self._email_sender(config, payload)
                 result = notify_store.RESULT_FALLBACK if errors else notify_store.RESULT_OK
-                self._log(alert, event_id, "email", result, "；".join(errors) or None)
+                self._log(trade_date, event_id, "email", result, "；".join(errors) or None)
                 return PushOutcome(ok=True, channel="email")
             except Exception as exc:
                 logger.warning("邮件发送失败：%s", exc)
                 errors.append(f"邮件：{exc}")
 
         detail = "；".join(errors) or "未配置任何通知通道"
-        self._log(alert, event_id, None, notify_store.RESULT_FAILED, detail)
+        self._log(trade_date, event_id, None, notify_store.RESULT_FAILED, detail)
         return PushOutcome(ok=False, error=detail)
 
     def _config(self) -> notify_store.NotificationConfig:
@@ -115,7 +142,7 @@ class AlertNotifier:
 
     def _log(
         self,
-        alert: dict,
+        trade_date: str,
         event_id: int | None,
         channel: str | None,
         result: str,
@@ -127,7 +154,7 @@ class AlertNotifier:
                 notify_store.log_attempt(
                     conn,
                     event_id=event_id,
-                    trade_date=str(alert.get("tradeDate") or ""),
+                    trade_date=trade_date,
                     channel=channel,
                     result=result,
                     detail=detail,
@@ -201,11 +228,67 @@ def build_test_alert(settings: Settings) -> dict:
     }
 
 
-def post_ntfy(config: notify_store.NotificationConfig, alert: dict) -> None:
+def _alert_payload(alert: dict) -> dict:
+    """通道收到的最小投递单元：标题 + 正文。日报与预警共用它。"""
+    return {"subject": alert_title(alert), "text": alert_text(alert)}
+
+
+def report_subject(report: dict) -> str:
+    triggers = report.get("triggers") or []
+    return f"{report.get('tradeDate') or ''} 收盘日报（{len(triggers)} 条触发）".strip()
+
+
+def report_text(report: dict) -> str:
+    """日报正文。手机上看不到 Web，所以「今天到底有没有事」必须一眼能读到。"""
+    triggers = report.get("triggers") or []
+    near = report.get("nearMisses") or []
+    summary = report.get("watchlistSummary") or {}
+
+    lines = [
+        report_subject(report),
+        "",
+        f"数据日期：{report.get('dataDate') or report.get('tradeDate') or '—'}",
+        "",
+        f"触发（{len(triggers)} 条）",
+    ]
+    lines.extend(_report_items(triggers))
+    lines.extend(["", f"接近阈值（{len(near)} 条）"])
+    lines.extend(_report_items(near))
+    lines.extend(
+        [
+            "",
+            f"自选涨跌：{summary.get('total', 0)} 只，"
+            f"涨 {summary.get('up', 0)} / 跌 {summary.get('down', 0)} / 平 {summary.get('flat', 0)}",
+        ]
+    )
+    if summary.get("suspended"):
+        lines.append(f"其中停牌 {summary['suspended']} 只")
+    lines.extend(["", DISCLAIMER])
+    return "\n".join(lines)
+
+
+REPORT_MAX_ITEMS = 20
+
+
+def _report_items(items: list[dict]) -> list[str]:
+    if not items:
+        return ["- 无"]
+    lines = [f"- {_trigger_line(item)}" for item in items[:REPORT_MAX_ITEMS]]
+    if len(items) > REPORT_MAX_ITEMS:
+        lines.append(f"- 另有 {len(items) - REPORT_MAX_ITEMS} 条，见 Web 日报")
+    return lines
+
+
+def _trigger_line(item: dict) -> str:
+    head = f"{item.get('code', '')} {item.get('name') or ''}".strip()
+    return f"{head} · {item.get('ruleName') or ''} · {_metric_line(item)}"
+
+
+def post_ntfy(config: notify_store.NotificationConfig, payload: dict) -> None:
     """出站 HTTP 推送。超时必须短：一次网络抖动不能拖死整个求值请求。"""
     topic = urllib.parse.quote(str(config.ntfy_topic or ""), safe="")
     url = f"{config.ntfy_server.rstrip('/')}/{topic}"
-    request = urllib.request.Request(url, data=alert_text(alert).encode("utf-8"), method="POST")
+    request = urllib.request.Request(url, data=payload["text"].encode("utf-8"), method="POST")
     if config.ntfy_token:
         request.add_header("Authorization", f"Bearer {config.ntfy_token}")
     # 标题不放进 HTTP 头：头部按 latin-1 编码，中文会乱码；正文本身已自足
@@ -215,12 +298,12 @@ def post_ntfy(config: notify_store.NotificationConfig, alert: dict) -> None:
             raise RuntimeError(f"ntfy 返回 HTTP {status}")
 
 
-def send_email(config: notify_store.NotificationConfig, alert: dict) -> None:
+def send_email(config: notify_store.NotificationConfig, payload: dict) -> None:
     message = EmailMessage()
-    message["Subject"] = alert_title(alert)
+    message["Subject"] = payload["subject"]
     message["From"] = config.smtp_user or str(config.email_to)
     message["To"] = str(config.email_to)
-    message.set_content(alert_text(alert))
+    message.set_content(payload["text"])
 
     with smtplib.SMTP(
         str(config.smtp_host), int(config.smtp_port or 25), timeout=SMTP_TIMEOUT

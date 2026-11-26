@@ -15,7 +15,7 @@ A 股量化数据分析与预警平台。**只读行情，不接交易**：不�
 
 ## Web 页面风格
 
-Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、个股详情、预警列表、预警详情、通知设置五页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/stocks/:code`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
+Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、个股详情、日报、预警列表、预警详情、通知设置六页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/stocks/:code`、`/reports`、`/reports/:date`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
 
 > **2026-11-26 变更**：原约定为「由 `App.vue` 的 `view` 状态切换，不引入 vue-router」。改为路由的原因是预警详情必须能刷新保持、能直接开链接，`ref` 切视图做不到这两点（见 `.scratch/quant-p0/07-alert-list.md`）。视觉与结构约定不变，新增页面仍需沿用控制台的左侧分组侧栏 + 顶栏结构（预警三页通过 `web/src/components/AppShell.vue` 复用）。
 
@@ -58,7 +58,7 @@ data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_f
 data/parquet/store_state.json     因子基准与最近一次导入结果
 data/meta/watchlist.json          自选清单（用户数据，不可从行情重建）
 data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单）
-data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录
+data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录、daily_report 日报快照
 ```
 
 `meta.db` 只存用户记录，不存行情；行情仍在 Parquet。它是嵌入式单文件库，不是独立数据库服务。注意与 `lianghua/data/meta.db` 同名但**完全无关**，禁止跨项目读写（见仓库根 `AGENTS.md`）。

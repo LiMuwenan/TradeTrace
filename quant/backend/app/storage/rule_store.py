@@ -352,6 +352,16 @@ def list_alerts(
     return rows, int(total)
 
 
+def alerts_on(conn: sqlite3.Connection, trade_date: str) -> list[sqlite3.Row]:
+    """某交易日的全部真实预警（含已推送的），供日报汇总用。"""
+    return conn.execute(
+        _ALERT_SELECT
+        + " WHERE e.event = 'enter' AND e.replayed = 0 AND e.trade_date = ?"
+        + " ORDER BY e.id",
+        (trade_date,),
+    ).fetchall()
+
+
 def unread_alert_count(conn: sqlite3.Connection) -> int:
     """未读预警数，口径与列表一致（排除回放）。"""
     return int(

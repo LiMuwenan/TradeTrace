@@ -84,6 +84,16 @@ CREATE TABLE IF NOT EXISTS notification_log (
 );
 CREATE INDEX IF NOT EXISTS idx_notify_log_date
     ON notification_log (trade_date, event_id);
+
+-- 日报：每个交易日一份快照。已投递的内容不再改写（09 票验收标准）
+CREATE TABLE IF NOT EXISTS daily_report (
+    trade_date   TEXT PRIMARY KEY,
+    content      TEXT    NOT NULL,
+    created_at   TEXT    NOT NULL,
+    updated_at   TEXT    NOT NULL,
+    pushed_at    TEXT,
+    push_channel TEXT
+);
 """
 
 

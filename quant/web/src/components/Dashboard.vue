@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot, AccordionTrigger } from 'reka-ui'
 import {
   Activity, BarChart3, Bell, ChevronDown, ChevronRight, CircleHelp, Database,
-  ExternalLink, Home, LifeBuoy, ListFilter, Menu, PanelLeftClose, RefreshCw,
+  ExternalLink, FileText, Home, LifeBuoy, ListFilter, Menu, PanelLeftClose, RefreshCw,
   Search, Settings2, Star,
 } from 'lucide-vue-next'
 import {
@@ -190,6 +190,7 @@ const navGroups = [
     items: [
       { label: '规则', icon: ListFilter, to: '/rules' },
       { label: '预警列表', icon: Bell, to: '/alerts' },
+      { label: '日报', icon: FileText, to: '/reports' },
       { label: '通知设置', icon: Settings2, to: '/settings/notification' },
     ],
   },

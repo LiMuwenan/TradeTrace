@@ -5,6 +5,8 @@ import AlertsPage from './components/AlertsPage.vue'
 import AlertDetailPage from './components/AlertDetailPage.vue'
 import NotificationSettingsPage from './components/NotificationSettingsPage.vue'
 import RulesPage from './components/RulesPage.vue'
+import ReportsPage from './components/ReportsPage.vue'
+import ReportDetailPage from './components/ReportDetailPage.vue'
 
 // 图表库体积大，详情页按需加载，不拖慢首屏
 const StockDetailPage = () => import('./components/StockDetailPage.vue')
@@ -19,6 +21,8 @@ const routes = [
   { path: '/alerts/:id(\\d+)', name: 'alert-detail', component: AlertDetailPage, props: true },
   { path: '/rules', name: 'rules', component: RulesPage },
   { path: '/stocks/:code', name: 'stock-detail', component: StockDetailPage, props: true },
+  { path: '/reports', name: 'reports', component: ReportsPage },
+  { path: '/reports/:date(\\d{4}-\\d{2}-\\d{2})', name: 'report-detail', component: ReportDetailPage, props: true },
   { path: '/settings/notification', name: 'notification-settings', component: NotificationSettingsPage },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
