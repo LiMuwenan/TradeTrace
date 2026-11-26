@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import bisect
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -23,6 +24,7 @@ from app.storage.schema import (
 )
 
 _DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})$")
+_YEAR_RE = re.compile(r"^(\d{4})$")
 
 # 错误消息里最多列出几个标的，避免刷屏
 _MAX_LISTED_CODES = 5
@@ -71,8 +73,18 @@ def normalize_daily_frame(frame: pd.DataFrame, *, source: str, trade_date: str) 
 
     for column in ("open", "high", "low", "close", "preclose", "tradestatus"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
-        if frame[column].isna().any():
-            raise IngestError(f"{source} 的 {column} 存在空值或非数字")
+
+    if frame["tradestatus"].isna().any():
+        raise IngestError(f"{source} 的 tradestatus 存在空值或非数字")
+
+    # 停牌当天数据源可能整行不给报价（只有 tradestatus=0），价格允许为空；
+    # 正常交易的标的价格必须齐全。
+    price_columns = ["open", "high", "low", "close", "preclose"]
+    broken = frame[(frame["tradestatus"] != 0) & frame[price_columns].isna().any(axis=1)]
+    if len(broken):
+        columns = "、".join(column for column in price_columns if broken[column].isna().any())
+        codes = "、".join(broken["code"].head(_MAX_LISTED_CODES))
+        raise IngestError(f"{source} 的 {columns} 存在空值或非数字：{codes}")
 
     for column in ("volume", "amount", "turn", "pctChg", "peTTM", "pbMRQ", "psTTM", "pcfNcfTTM"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
@@ -116,12 +128,50 @@ def _filename_date(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _factor_dir(root: Path) -> Path:
+    """除权清单目录：兼容历史的 `factor/` 与实时归档用的 `factors/`。"""
+    for name in ("factors", "factor"):
+        candidate = root / name
+        if candidate.is_dir():
+            return candidate
+    return root / "factors"
+
+
+def _archived_events(path: Path, trade_date: str) -> dict[str, float] | None:
+    """年文件里已有该交易日的事件时返回它们，避免重复抓取覆盖已归档事实。"""
+    if not path.is_file():
+        return None
+    rows = read_factor_csv(path)
+    rows = rows[rows["dividOperateDate"] == trade_date]
+    return _events_from_frame(rows) if len(rows) else None
+
+
+def _append_factor_rows(path: Path, rows: pd.DataFrame) -> None:
+    """把当日除权事件并入当年文件；同代码同日以后抓到的为准，原子替换。"""
+    incoming = rows.reindex(columns=FACTOR_COLUMNS)
+    if path.is_file():
+        old = pd.read_csv(path, dtype={"code": str}, encoding="utf-8-sig")
+        merged = pd.concat([old.reindex(columns=FACTOR_COLUMNS), incoming], ignore_index=True)
+    else:
+        merged = incoming
+    merged = merged.drop_duplicates(subset=["code", "dividOperateDate"], keep="last")
+    merged = merged.sort_values(["dividOperateDate", "code"], kind="mergesort")
+
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        merged.to_csv(tmp_path, index=False, encoding="utf-8-sig")
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 class HistoricalCsvSource:
     """历史按日横截面 CSV 目录。
 
-    目录约定：`<root>/daily/YYYY-MM-DD.csv` 与 `<root>/factors/YYYY-MM-DD.csv`；
-    没有 `daily/` 子目录时把 `<root>/*.csv` 当日 K。除权文件按 `dividOperateDate`
-    对齐到“当天或之后的第一个交易日”，因此某天漏了日 K 也不会丢掉除权事件。
+    目录约定：`<root>/daily/YYYY-MM-DD.csv` 与 `<root>/factor(s)/YYYY.csv`
+    （早期按日归档的 `YYYY-MM-DD.csv` 仍然兼容）；没有 `daily/` 子目录时把
+    `<root>/*.csv` 当日 K。除权事件按 `dividOperateDate` 对齐到“当天或之后的第一个
+    交易日”，因此某天漏了日 K 也不会丢掉除权事件。除权文件按年懒加载并缓存。
     """
 
     name = "csv"
@@ -143,16 +193,51 @@ class HistoricalCsvSource:
             raise IngestError(f"历史数据目录中没有 YYYY-MM-DD.csv 文件：{daily_dir}")
 
         self._dates = sorted(self._daily_files)
-        self._events_by_date = self._load_factor_events(self.root / "factors")
+        self._factor_yearly: dict[str, Path] = {}
+        self._factor_daily: dict[str, list[Path]] = {}
+        factor_dir = _factor_dir(self.root)
+        if factor_dir.is_dir():
+            for path in sorted(factor_dir.glob("*.csv")):
+                year = _YEAR_RE.match(path.stem)
+                if year:
+                    self._factor_yearly[year.group(1)] = path
+                    continue
+                trade_date = _filename_date(path)
+                if trade_date:
+                    self._factor_daily.setdefault(trade_date[:4], []).append(path)
+        self._factor_cache: dict[str, dict[str, dict[str, float]]] = {}
 
     def dates(self) -> list[str]:
         return list(self._dates)
 
-    def _load_factor_events(self, factor_dir: Path) -> dict[str, dict[str, float]]:
-        if not factor_dir.is_dir():
-            return {}
+    def load(self, trade_date: str) -> DaySnapshot:
+        path = self._daily_files.get(trade_date)
+        if path is None:
+            raise IngestError(f"历史数据中没有交易日 {trade_date} 的日 K 文件")
+        year = trade_date[:4]
+        if year not in self._factor_cache:
+            self._factor_cache[year] = self._load_factor_year(year)
+        return DaySnapshot(
+            trade_date=trade_date,
+            bars=read_daily_csv(path, trade_date),
+            factor_events=dict(self._factor_cache[year].get(trade_date, {})),
+        )
 
-        frames = [read_factor_csv(path) for path in sorted(factor_dir.glob("*.csv"))]
+    def _load_factor_year(self, year: str) -> dict[str, dict[str, float]]:
+        """加载某一年的除权事件，按交易日归组。
+
+        上一年末尾的事件可能因为跨年休市落到本年第一个交易日，所以同时读上一年。
+        返回结构是「交易日 → {代码: 官方后复权因子}」。
+        """
+        paths: list[Path] = []
+        for target_year in (str(int(year) - 1), year):
+            yearly = self._factor_yearly.get(target_year)
+            if yearly is not None:
+                paths.append(yearly)
+            paths.extend(self._factor_daily.get(target_year, ()))
+
+        frames = [read_factor_csv(path) for path in paths]
+        frames = [frame for frame in frames if len(frame)]
         if not frames:
             return {}
 
@@ -164,21 +249,13 @@ class HistoricalCsvSource:
             if index >= len(self._dates):
                 continue  # 除权日之后没有任何日 K，暂时无处应用
             target = self._dates[index]
+            if target[:4] != year:
+                continue  # 跨年事件留给下一年加载时再归组
             current = grouped.setdefault(target, {}).get(code)
             # 同一天有多个除权事件时保留最新的官方值
             if current is None or event_date >= current[0]:
                 grouped[target][code] = (event_date, float(factor))
         return {key: {code: value[1] for code, value in items.items()} for key, items in grouped.items()}
-
-    def load(self, trade_date: str) -> DaySnapshot:
-        path = self._daily_files.get(trade_date)
-        if path is None:
-            raise IngestError(f"历史数据中没有交易日 {trade_date} 的日 K 文件")
-        return DaySnapshot(
-            trade_date=trade_date,
-            bars=read_daily_csv(path, trade_date),
-            factor_events=dict(self._events_by_date.get(trade_date, {})),
-        )
 
 
 class DailyFetcher(Protocol):
@@ -207,7 +284,7 @@ class RealtimeSource:
             raise IngestError(f"{trade_date} 没有取到日 K 数据（非交易日或接口失败）")
 
         daily_dir = self.raw_dir / "daily"
-        factor_dir = self.raw_dir / "factors"
+        factor_dir = _factor_dir(self.raw_dir)
         daily_dir.mkdir(parents=True, exist_ok=True)
 
         warnings: list[str] = []
@@ -224,13 +301,18 @@ class RealtimeSource:
         events: dict[str, float] = {}
         if not factors.empty:
             factor_dir.mkdir(parents=True, exist_ok=True)
-            factor_path = factor_dir / f"{trade_date}.csv"
-            if factor_path.exists():
-                events = _events_from_frame(read_factor_csv(factor_path))
+            year_path = factor_dir / f"{trade_date[:4]}.csv"
+            archived = _archived_events(year_path, trade_date)
+            if archived is not None:
+                # 当日事件已归档：沿用归档结果，不用本次抓取覆盖
+                warnings.append(f"原始除权清单已归档，本次沿用归档文件：{year_path}")
+                events = archived
             else:
                 normalized = normalize_factor_frame(factors, source="实时除权清单")
-                factors[FACTOR_COLUMNS].to_csv(factor_path, index=False, encoding="utf-8-sig")
-                events = _events_from_frame(normalized)
+                _append_factor_rows(year_path, factors)
+                events = _events_from_frame(
+                    normalized[normalized["dividOperateDate"] == trade_date]
+                )
 
         return DaySnapshot(
             trade_date=trade_date,

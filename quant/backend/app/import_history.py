@@ -4,7 +4,8 @@
     python -m app.import_history [历史目录]
 
 不指定目录时读取 config.toml 的 `data.raw_dir`。目录内约定
-`daily/YYYY-MM-DD.csv` 与 `factors/YYYY-MM-DD.csv`（没有 daily/ 时直接读根目录）。
+`daily/YYYY-MM-DD.csv` 与 `factor(s)/YYYY.csv`（没有 daily/ 时直接读根目录）；
+按日归档的除权文件 `YYYY-MM-DD.csv` 仍兼容。
 """
 from __future__ import annotations
 

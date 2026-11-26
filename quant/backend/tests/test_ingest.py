@@ -10,7 +10,14 @@ from app.storage.ingest import Ingestor
 from app.storage.schema import DAILY_COLUMNS, FACTOR_COLUMNS, IngestError
 from app.storage.sources import HistoricalCsvSource, RealtimeSource
 from app.storage.store_state import load_state
-from factories import TRADE_DATE, bar, factor_frame, write_daily, write_factors
+from factories import (
+    TRADE_DATE,
+    bar,
+    factor_frame,
+    write_daily,
+    write_factors,
+    write_yearly_factors,
+)
 
 
 def ingest(settings: Settings, root, trade_date: str = TRADE_DATE):
@@ -47,6 +54,24 @@ def test_back_adjusted_price_is_raw_price_times_factor(local_settings, tmp_path)
     assert latest["adjClose"] == pytest.approx(round(9.6 * 10.0 / 9.5, 4))
 
 
+def test_factor_baseline_persists_across_batches(local_settings, tmp_path):
+    root = tmp_path / "history"
+    write_daily(root, "2026-06-11", [bar("2026-06-11", "sh.600000", 10.0)])
+    write_daily(root, "2026-06-12", [bar("2026-06-12", "sh.600000", 9.8, preclose=9.5)])
+    write_daily(root, TRADE_DATE, [bar(TRADE_DATE, "sh.600000", 10.29, preclose=9.8)])
+    write_factors(root, "2026-06-12", [("sh.600000", "2026-06-12", 1.05)])
+    write_factors(root, TRADE_DATE, [("sh.600000", TRADE_DATE, 1.26)])
+
+    Ingestor(local_settings).ingest_days(["2026-06-11", "2026-06-12"], HistoricalCsvSource(root))
+    report = Ingestor(local_settings).ingest_day(TRADE_DATE, HistoricalCsvSource(root))
+
+    assert report.warnings == []
+    factors = [row["backFactor"] for row in series(local_settings, "sh.600000")]
+    assert factors[1] == pytest.approx(10.0 / 9.5)
+    assert factors[2] == pytest.approx(10.0 / 9.5 * 1.2)
+    assert load_state(local_settings.parquet_dir).scales["sh.600000"] == pytest.approx(1.05 * 9.5 / 10.0)
+
+
 def test_factor_is_forward_filled_when_no_new_event(local_settings, tmp_path):
     root = tmp_path / "history"
     write_daily(root, "2026-06-11", [bar("2026-06-11", "sh.600000", 10.0), bar("2026-06-11", "sz.000001", 20.0)])
@@ -75,7 +100,7 @@ def test_reingesting_same_day_overwrites_instead_of_duplicating(local_settings, 
     assert rows[0]["close"] == 11
 
 
-def test_rejects_factor_that_goes_backwards(local_settings, tmp_path):
+def test_factor_going_backwards_is_written_with_warning(local_settings, tmp_path):
     root = tmp_path / "history"
     write_daily(root, "2026-06-11", [bar("2026-06-11", "sh.600000", 10.0)])
     write_daily(root, "2026-06-12", [bar("2026-06-12", "sh.600000", 9.8, preclose=9.5)])
@@ -85,13 +110,18 @@ def test_rejects_factor_that_goes_backwards(local_settings, tmp_path):
 
     Ingestor(local_settings).ingest_days(["2026-06-11", "2026-06-12"], HistoricalCsvSource(root))
 
-    with pytest.raises(IngestError, match="回退"):
-        Ingestor(local_settings).ingest_day("2026-06-15", HistoricalCsvSource(root))
+    report = Ingestor(local_settings).ingest_day("2026-06-15", HistoricalCsvSource(root))
 
-    assert [row["date"] for row in series(local_settings, "sh.600000")] == ["2026-06-11", "2026-06-12"]
+    assert report.status == "ok"
+    assert any("回退" in warning for warning in report.warnings)
+    assert [row["date"] for row in series(local_settings, "sh.600000")] == [
+        "2026-06-11",
+        "2026-06-12",
+        "2026-06-15",
+    ]
 
 
-def test_rejects_single_event_increment_out_of_range(local_settings, tmp_path):
+def test_single_event_increment_out_of_range_is_written_with_warning(local_settings, tmp_path):
     root = tmp_path / "history"
     write_daily(root, "2026-06-12", [bar("2026-06-12", "sh.600000", 10.0)])
     write_daily(root, TRADE_DATE, [bar(TRADE_DATE, "sh.600000", 1.02, preclose=1.0)])
@@ -99,20 +129,24 @@ def test_rejects_single_event_increment_out_of_range(local_settings, tmp_path):
 
     Ingestor(local_settings).ingest_day("2026-06-12", HistoricalCsvSource(root))
 
-    with pytest.raises(IngestError, match="增量"):
-        ingest(local_settings, root)
+    report = ingest(local_settings, root)
 
-    assert [row["date"] for row in series(local_settings, "sh.600000")] == ["2026-06-12"]
+    assert report.status == "ok"
+    assert any("单次增量" in warning for warning in report.warnings)
+    assert [row["date"] for row in series(local_settings, "sh.600000")] == [
+        "2026-06-12",
+        TRADE_DATE,
+    ]
 
 
 def test_failed_ingest_leaves_no_temp_file(local_settings, tmp_path):
     root = tmp_path / "history"
     write_daily(root, "2026-06-12", [bar("2026-06-12", "sh.600000", 10.0)])
     write_daily(root, TRADE_DATE, [bar(TRADE_DATE, "sh.600000", 1.02, preclose=1.0)])
-    write_factors(root, TRADE_DATE, [("sh.600000", TRADE_DATE, 2.0)])
+    write_factors(root, TRADE_DATE, [("sh.600000", TRADE_DATE, -1.0)])
 
     Ingestor(local_settings).ingest_day("2026-06-12", HistoricalCsvSource(root))
-    with pytest.raises(IngestError):
+    with pytest.raises(IngestError, match="非法"):
         ingest(local_settings, root)
 
     assert not list(local_settings.parquet_dir.glob("*.tmp"))
@@ -140,9 +174,9 @@ def test_failed_ingest_does_not_persist_derived_scales(local_settings, tmp_path)
     write_daily(root, "2026-06-12", [bar("2026-06-12", "sh.600000", 9.8, preclose=9.5)])
     write_daily(root, TRADE_DATE, [bar(TRADE_DATE, "sh.600000", 9.9, preclose=9.8)])
     write_factors(root, "2026-06-12", [("sh.600000", "2026-06-12", 1.05)])
-    write_factors(root, TRADE_DATE, [("sh.600000", TRADE_DATE, 1.00)])
+    write_factors(root, TRADE_DATE, [("sh.600000", TRADE_DATE, -1.0)])
 
-    with pytest.raises(IngestError, match="回退"):
+    with pytest.raises(IngestError, match="非法"):
         Ingestor(local_settings).ingest_days(
             ["2026-06-11", "2026-06-12", TRADE_DATE], HistoricalCsvSource(root)
         )
@@ -215,12 +249,38 @@ def test_realtime_source_archives_raw_csv_in_history_layout(local_settings):
     Ingestor(local_settings).ingest_day(TRADE_DATE, source)
 
     daily_path = local_settings.raw_dir / "daily" / f"{TRADE_DATE}.csv"
-    factor_path = local_settings.raw_dir / "factors" / f"{TRADE_DATE}.csv"
+    factor_path = local_settings.raw_dir / "factors" / f"{TRADE_DATE[:4]}.csv"
     assert daily_path.is_file() and factor_path.is_file()
     # 归档文件可直接被历史导入读取
     archived = pd.read_csv(daily_path, encoding="utf-8-sig")
     assert list(archived.columns) == DAILY_COLUMNS
+    assert list(pd.read_csv(factor_path, encoding="utf-8-sig").columns) == FACTOR_COLUMNS
     assert series(local_settings, "sh.600000")[0]["close"] == 10
+
+
+def test_yearly_factor_file_is_applied(local_settings, tmp_path):
+    root = tmp_path / "history"
+    write_daily(root, "2026-06-12", [bar("2026-06-12", "sh.600000", 10.0)])
+    write_daily(root, TRADE_DATE, [bar(TRADE_DATE, "sh.600000", 9.6, preclose=9.5)])
+    write_yearly_factors(root, "2026", [("sh.600000", TRADE_DATE, 1.05)])
+
+    Ingestor(local_settings).import_history(HistoricalCsvSource(root))
+
+    assert series(local_settings, "sh.600000")[1]["backFactor"] == pytest.approx(10.0 / 9.5)
+
+
+def test_year_end_factor_event_lands_on_next_year_trading_day(local_settings, tmp_path):
+    root = tmp_path / "history"
+    write_daily(root, "2026-12-30", [bar("2026-12-30", "sh.600000", 10.0)])
+    # 2026-12-31 除权但当天没有日 K 文件，事件要落到下一年第一个交易日
+    write_daily(root, "2027-01-04", [bar("2027-01-04", "sh.600000", 10.0, preclose=9.5)])
+    write_yearly_factors(root, "2026", [("sh.600000", "2026-12-31", 1.05)])
+
+    Ingestor(local_settings).import_history(HistoricalCsvSource(root))
+
+    rows = series(local_settings, "sh.600000")
+    assert [row["date"] for row in rows] == ["2026-12-30", "2027-01-04"]
+    assert rows[1]["backFactor"] == pytest.approx(10.0 / 9.5)
 
 
 def test_factor_file_without_daily_file_applies_to_next_trading_day(local_settings, tmp_path):

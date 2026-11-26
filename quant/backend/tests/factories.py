@@ -52,20 +52,14 @@ def write_daily(root: Path, trade_date: str, rows: list[dict]) -> None:
 def write_factors(root: Path, file_date: str, rows: list[tuple[str, str, float]]) -> None:
     path = root / "factors" / f"{file_date}.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
-    frame = pd.DataFrame(
-        [
-            {
-                "code": code,
-                "dividOperateDate": event_date,
-                "foreAdjustFactor": 1 / factor,
-                "backAdjustFactor": factor,
-                "adjustFactor": factor,
-            }
-            for code, event_date, factor in rows
-        ],
-        columns=FACTOR_COLUMNS,
-    )
-    frame.to_csv(path, index=False, encoding="utf-8-sig")
+    factor_frame(rows).to_csv(path, index=False, encoding="utf-8-sig")
+
+
+def write_yearly_factors(root: Path, year: str, rows: list[tuple[str, str, float]]) -> None:
+    """按年归档的除权清单：`factors/YYYY.csv`。"""
+    path = root / "factors" / f"{year}.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    factor_frame(rows).to_csv(path, index=False, encoding="utf-8-sig")
 
 
 def factor_frame(rows: list[tuple[str, str, float]]) -> pd.DataFrame:
