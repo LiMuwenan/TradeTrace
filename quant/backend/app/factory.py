@@ -7,12 +7,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
 from app.api import alerts, data, health, pipeline, reports, rules, settings as settings_api, stocks, watchlist
-from app.config import Settings, load_settings
+from app.config import PROJECT_ROOT, Settings, load_settings
 from app.schemas import fail
 from app.services.notify import AlertNotifier, Notifier
 from app.services.scheduler import DailyScheduler
@@ -20,6 +21,9 @@ from app.storage.stock_names import BaostockNameProvider, StockNameCache
 from app.storage.watchlist_store import WatchlistCorruptError
 
 API_PREFIX = "/api/v1"
+
+# 前端构建产物；存在就由后端一并托管，容器里只有这一个进程
+WEB_DIST = PROJECT_ROOT / "web" / "dist"
 
 
 def create_app(
@@ -88,7 +92,32 @@ def create_app(
     app.include_router(reports.router, prefix=API_PREFIX)
     app.include_router(pipeline.router, prefix=API_PREFIX)
     app.include_router(settings_api.router, prefix=API_PREFIX)
+    _serve_web(app)
     return app
+
+
+def _serve_web(app: FastAPI) -> None:
+    """有前端构建产物时由后端托管；没有（开发时用 Vite）就保持纯 API。"""
+    index = WEB_DIST / "index.html"
+    if not index.is_file():
+        return
+
+    assets = WEB_DIST / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="web-assets")
+
+    root = WEB_DIST.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa_fallback(path: str):
+        # 未命中的接口仍要拿统一 JSON 错误，不能被前端页面接管
+        if path == "api" or path.startswith("api/"):
+            raise StarletteHTTPException(status_code=404, detail="Not Found")
+        candidate = (root / path).resolve()
+        if path and candidate.is_file() and candidate.is_relative_to(root):
+            return FileResponse(candidate)
+        # 其余路径交给前端路由（vue-router history 模式刷新/直链都能进）
+        return FileResponse(index)
 
 
 def _ensure_dirs_writable(settings: Settings) -> None:
