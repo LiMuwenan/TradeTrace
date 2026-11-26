@@ -54,6 +54,8 @@ blocked_by: [02]
 
 **规则来源**（2026-11-26 决定）：本票先建 `alert_rule` 表（表结构与 06 一致），并支持从 `config/rules.example.toml` 一类的配置文件导入种子规则，用于 06 的 UI 上线前调试。**这条导入路径是临时后门**，06 完成后删除；不可成为第二条长期写入口。
 
+> **2026-11-26 已删除**：06 上线时移除了 `app/import_rules.py`、`config/rules.example.toml` 与 `rule_store.import_seed_rules`。规则定义现在只有一个写入口 —— `app/services/rules.py`（Web 规则页）。
+
 **推送收尾**（ADR `0008-evaluate-invokes-notify.md`）：求值写库提交后，在同一请求内同步调用 08 的通知服务，投递本次产生的 `enter`、`replayed=0`、`pushed_at` 为空的行；通知异常必须兜住，不得回滚或影响求值结果，接口响应另给推送摘要（成功数 / 失败数）。
 
 **实施记录**（2026-11-26）：接口为 `POST /rules/evaluate`、`POST /rules/{id}/replay`、`GET /rules/{id}/history`；求值集中在 `app/services/rule_eval.py`，存储 `app/storage/meta_db.py` + `rule_store.py`。基准：100 只自选 × 250 交易日 × 5 类规则，单日求值 **2.87s**（含 100 次 Parquet 查询与 61 条推送尝试），满足 5 秒约束；导入同规模数据耗时 16.5s 属 02 号票范围。

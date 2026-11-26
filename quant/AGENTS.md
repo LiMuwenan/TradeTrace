@@ -15,7 +15,7 @@ A 股量化数据分析与预警平台。**只读行情，不接交易**：不�
 
 ## Web 页面风格
 
-Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有预警列表、预警详情、通知设置三页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
+Web 端为浅色的现代 SaaS 风格。落地页 `LandingPage` 与控制台 `Dashboard` 之外，另有规则、预警列表、预警详情、通知设置四页；页面切换由 `vue-router` 负责（`web/src/router.js`），路由为 `/`、`/dashboard`、`/rules`、`/alerts`、`/alerts/:id`、`/settings/notification`。新增页面必须沿用以下约定。
 
 > **2026-11-26 变更**：原约定为「由 `App.vue` 的 `view` 状态切换，不引入 vue-router」。改为路由的原因是预警详情必须能刷新保持、能直接开链接，`ref` 切视图做不到这两点（见 `.scratch/quant-p0/07-alert-list.md`）。视觉与结构约定不变，新增页面仍需沿用控制台的左侧分组侧栏 + 顶栏结构（预警三页通过 `web/src/components/AppShell.vue` 复用）。
 
@@ -72,6 +72,7 @@ data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3�
 - **禁止 import 或引用 `lianghua/`、`everything/` 的源码与数据文件**；复用通过复制代码或重建数据实现，不跨项目共享。
 - 原始 CSV 是事实源，Parquet 是派生索引；**不得修改已归档的原始文件**。
 - 落盘只存不复权价与后复权因子，不存前复权数据。
+- **规则定义只有一个写入口：Web 的规则页**（`app/services/rules.py`）。05 号的 TOML 种子导入已随 06 上线删除，不要再加回配置文件写规则的第二条路径。
 
 ## 命令
 
@@ -83,7 +84,6 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m app          # 监听地址与端口取自 config/config.toml
 .\.venv\Scripts\python.exe -m app.import_history [历史目录]  # 默认读 config 的 raw_dir
 .\.venv\Scripts\python.exe -m app.daily_update [YYYY-MM-DD]  # 每日增量，默认今天
-.\.venv\Scripts\python.exe -m app.import_rules [规则 TOML]    # 导入种子规则（06 上线前的调试后门）
 
 # 前端（在 quant/web 下）
 npm install

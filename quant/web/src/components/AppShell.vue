@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bell, ChevronRight, Home, LayoutDashboard, PanelLeftClose, Settings2 } from 'lucide-vue-next'
+import { Bell, ChevronRight, Home, LayoutDashboard, ListFilter, PanelLeftClose, Settings2 } from 'lucide-vue-next'
 import { cn } from '../lib/utils'
 
 defineProps({
@@ -18,6 +18,7 @@ const navGroups = [
     label: '工作区',
     items: [
       { label: '控制台', to: '/dashboard', icon: LayoutDashboard },
+      { label: '规则', to: '/rules', icon: ListFilter },
       { label: '预警列表', to: '/alerts', icon: Bell, badge: true },
     ],
   },
@@ -36,6 +37,9 @@ const activePath = computed(() => {
   if (route.path.startsWith('/alerts')) return '/alerts'
   return route.path
 })
+
+const PAGE_TITLES = { '/alerts': '预警', '/rules': '规则', '/settings/notification': '通知设置' }
+const pageTitle = computed(() => PAGE_TITLES[activePath.value] || '控制台')
 </script>
 
 <template>
@@ -97,7 +101,7 @@ const activePath = computed(() => {
 
     <div :class="cn('transition-all duration-200', collapsed ? 'ml-[68px]' : 'ml-[228px]')">
       <header class="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
-        <p class="text-sm font-medium">{{ activePath === '/alerts' ? '预警' : '通知设置' }}</p>
+        <p class="text-sm font-medium">{{ pageTitle }}</p>
         <p class="text-xs text-muted-foreground">只读行情 · 不构成投资建议</p>
       </header>
 

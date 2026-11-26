@@ -109,3 +109,40 @@ export function fetchNotificationLog({ date, page = 1, pageSize = 10 } = {}) {
   if (date) params.set('date', date)
   return request(`/notifications/log?${params.toString()}`)
 }
+
+// --- 规则管理（06 号票）---------------------------------------------------
+
+export function fetchRules() {
+  return request('/rules')
+}
+
+export function createRule(payload) {
+  return request('/rules', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateRule(id, payload) {
+  return request(`/rules/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function setRuleEnabled(id, enabled) {
+  return request(`/rules/${id}/enabled`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/** 手动触发某交易日的求值（05 的入口，规则页与调试都走它）。 */
+export function evaluateRules(date, code) {
+  const body = { date }
+  if (code) body.code = code
+  return request('/rules/evaluate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}

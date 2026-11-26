@@ -304,8 +304,11 @@ def _alert_payload(row, names: dict[str, str]) -> dict:
     }
 
 
-def replay_rule(settings: Settings, rule_id: int) -> dict:
-    """静默回放：从该规则能算出结果的最早一天走到启用前一日，只写记录不推送。
+def replay_rule(settings: Settings, rule_id: int, *, until: str | None = None) -> dict:
+    """静默回放：从该规则能算出结果的最早一天走到 `until` 的前一日，只写记录不推送。
+
+    `until` 缺省取规则创建日（新建规则时即今天）。重新启用已停用的规则时由调用方
+    传入启用日，把停用期间漏掉的历史一并补上。
 
     起点必须早到足以看见「由假变真」的那一刻：若只从「距今 N 个交易日」起算，而条件
     在整段窗口内一直成立，回放就看不到进入点，触发态会被误判为未触发，次日求值立刻
@@ -318,7 +321,7 @@ def replay_rule(settings: Settings, rule_id: int) -> dict:
         if rule is None:
             raise LookupError(f"规则不存在：{rule_id}")
 
-        enabled_on = rule.created_at[:10]
+        enabled_on = until or rule.created_at[:10]
         scope_cache: dict[str, list[str]] = {}
         codes = _scope_codes(settings, rule, scope_cache)
         entered = 0

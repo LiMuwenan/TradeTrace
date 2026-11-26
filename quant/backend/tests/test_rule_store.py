@@ -126,28 +126,40 @@ def test_close_states_writes_reasoned_exit_for_entered_codes(tmp_path):
     assert last["trade_date"] == "2026-06-15"  # 与当日 enter 同日，靠唯一键含 event 才写得进去
 
 
-def test_seed_rules_are_imported_from_toml(tmp_path):
+def test_update_rule_rewrites_params_but_keeps_type_and_scope(tmp_path):
     conn = _conn(tmp_path)
-    seed = tmp_path / "rules.toml"
-    seed.write_text(
-        """
-[[rules]]
-type = "breakout"
-name = "突破60"
-window = 60
-
-[[rules]]
-type = "volume_surge"
-name = "放量"
-window = 5
-threshold = 1.5
-enabled = false
-""",
-        encoding="utf-8",
+    rule = rule_store.create_rule(
+        conn, type="breakout", name="旧名", scope="single", scope_code="sh.600000", window=60
     )
 
-    created = rule_store.import_seed_rules(conn, seed)
+    updated = rule_store.update_rule(conn, rule.id, name="新名", window=20, threshold=None)
 
-    assert [rule.name for rule in created] == ["突破60", "放量"]
-    assert created[1].threshold == 1.5
-    assert created[1].enabled is False
+    assert updated is not None
+    assert (updated.name, updated.window) == ("新名", 20)
+    assert (updated.type, updated.scope, updated.scope_code) == ("breakout", "single", "sh.600000")
+
+
+def test_update_rule_rejects_out_of_range_window(tmp_path):
+    conn = _conn(tmp_path)
+    rule = rule_store.create_rule(conn, type="breakout", name="a", window=60)
+
+    with pytest.raises(rule_store.RuleValidationError):
+        rule_store.update_rule(conn, rule.id, name="a", window=1, threshold=None)
+
+
+def test_update_rule_validates_threshold_with_existing_type(tmp_path):
+    """改参数沿用原类型的阈值口径：超跌规则漏给阈值必须报错，而不是静默清空。"""
+    conn = _conn(tmp_path)
+    rule = rule_store.create_rule(conn, type="oversold", name="a", window=60, threshold=20.0)
+
+    with pytest.raises(rule_store.RuleValidationError):
+        rule_store.update_rule(conn, rule.id, name="a", window=30, threshold=None)
+
+
+def test_last_enter_dates_ignores_replayed_records(tmp_path):
+    conn = _conn(tmp_path)
+    rule = rule_store.create_rule(conn, type="breakout", name="a", window=2)
+    rule_store.record_event(conn, code="sh.600000", rule_id=rule.id, trade_date="2026-06-01", event="enter", replayed=True)
+    rule_store.record_event(conn, code="sh.600000", rule_id=rule.id, trade_date="2026-06-03", event="enter")
+
+    assert rule_store.last_enter_dates(conn) == {rule.id: "2026-06-03"}

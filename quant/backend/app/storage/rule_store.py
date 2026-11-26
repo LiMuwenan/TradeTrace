@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import sqlite3
-import tomllib
-from pathlib import Path
 
 from app.storage.meta_db import (
     RULE_TYPES,
@@ -111,6 +109,62 @@ def list_rules(conn: sqlite3.Connection, *, enabled_only: bool = False) -> list[
     return [_row_to_rule(row) for row in conn.execute(sql).fetchall()]
 
 
+def update_rule(
+    conn: sqlite3.Connection,
+    rule_id: int,
+    *,
+    name: str,
+    window: int,
+    threshold: float | None,
+    timezone: str = "Asia/Shanghai",
+) -> Rule | None:
+    """改写规则的名称与判定参数。类型与标的范围不可改（要换就新建一条）。
+
+    校验口径与新建完全一致：`type`/`scope` 取自库中的现值，因此阈值是否必填、
+    区间如何限制都沿用同一套规则。
+    """
+    existing = get_rule(conn, rule_id)
+    if existing is None:
+        return None
+    _, scope_code, window, threshold = validate_rule(
+        type=existing.type,
+        scope=existing.scope,
+        scope_code=existing.scope_code,
+        window=window,
+        threshold=threshold,
+    )
+    name = (name or "").strip()
+    if not name:
+        raise RuleValidationError("规则名称不能为空")
+    conn.execute(
+        "UPDATE alert_rule SET name = ?, window = ?, threshold = ? WHERE id = ?",
+        (name, window, threshold, rule_id),
+    )
+    return get_rule(conn, rule_id)
+
+
+def set_enabled(conn: sqlite3.Connection, rule_id: int, enabled: bool) -> Rule | None:
+    """启用/停用规则。停用前调用方须先用 `close_states` 收尾。"""
+    conn.execute("UPDATE alert_rule SET enabled = ? WHERE id = ?", (1 if enabled else 0, rule_id))
+    return get_rule(conn, rule_id)
+
+
+def last_enter_dates(conn: sqlite3.Connection) -> dict[int, str]:
+    """各规则最近一次「真实触发」的交易日，一次查完避免列表 N+1。
+
+    只统计 `replayed = 0` 的进入记录：静默回放补的是历史，不是「最近一次提醒」。
+    """
+    rows = conn.execute(
+        """
+        SELECT rule_id, MAX(trade_date) AS trade_date
+        FROM rule_state_event
+        WHERE event = 'enter' AND replayed = 0
+        GROUP BY rule_id
+        """
+    ).fetchall()
+    return {int(row["rule_id"]): row["trade_date"] for row in rows}
+
+
 def close_states(
     conn: sqlite3.Connection, rule_id: int, *, reason: str, timezone: str = "Asia/Shanghai"
 ) -> list[str]:
@@ -146,30 +200,6 @@ def close_states(
         ):
             closed.append(code)
     return closed
-
-
-def import_seed_rules(conn: sqlite3.Connection, path: Path | str, timezone: str = "Asia/Shanghai") -> list[Rule]:
-    """从 TOML 导入种子规则（06 上线前的调试后门，见 05 票备注）。"""
-    path = Path(path)
-    with path.open("rb") as fh:
-        raw = tomllib.load(fh)
-
-    created: list[Rule] = []
-    for item in raw.get("rules") or []:
-        created.append(
-            create_rule(
-                conn,
-                type=str(item.get("type", "")),
-                name=str(item.get("name", "")),
-                scope=str(item.get("scope", "watchlist")),
-                scope_code=item.get("scope_code") or item.get("scopeCode"),
-                window=item.get("window", 0),
-                threshold=item.get("threshold"),
-                enabled=bool(item.get("enabled", True)),
-                timezone=timezone,
-            )
-        )
-    return created
 
 
 # --- 触发态变更记录 -------------------------------------------------------

@@ -186,8 +186,9 @@ const navGroups = [
     ],
   },
   {
-    label: '预警',
+    label: '预警与规则',
     items: [
+      { label: '规则', icon: ListFilter, to: '/rules' },
       { label: '预警列表', icon: Bell, to: '/alerts' },
       { label: '通知设置', icon: Settings2, to: '/settings/notification' },
     ],
