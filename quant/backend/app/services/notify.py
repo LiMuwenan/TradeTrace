@@ -29,14 +29,6 @@ SMTP_TIMEOUT = 10.0
 
 DISCLAIMER = "本内容仅为数据分析，不构成投资建议"
 
-RULE_TYPE_LABELS = {
-    "breakout": "突破",
-    "oversold": "超跌",
-    "volume_surge": "放量",
-    "volume_shrink": "缩量",
-    "ma_cross": "均线穿越",
-}
-
 
 @dataclass(frozen=True)
 class PushOutcome:
@@ -177,11 +169,9 @@ def _metric_line(alert: dict) -> str:
     if rule_type in ("volume_surge", "volume_shrink"):
         return f"量比 {value}（阈值 {threshold}）"
     if rule_type == "ma_cross":
-        tail = f"，前 {window} 日均线" if window else ""
-        return f"均线 {value}{tail}"
+        return f"均线 {value}（前 {window} 日）" if window else f"均线 {value}"
     if rule_type == "breakout":
-        tail = f"前 {window} 日最高" if window else "区间最高"
-        return f"{tail} {value}"
+        return f"前 {window} 日最高 {value}" if window else f"区间最高 {value}"
     return f"触发值 {value}"
 
 

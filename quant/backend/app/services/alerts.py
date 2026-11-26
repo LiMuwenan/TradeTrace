@@ -114,6 +114,7 @@ def _to_item(row, names: dict[str, str]) -> dict:
         "value": row["value"],
         "threshold": row["threshold"],
         "price": row["price"],
+        "window": row["rule_window"],
         "readAt": row["read_at"],
         "pushedAt": row["pushed_at"],
         "pushChannel": row["push_channel"],

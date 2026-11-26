@@ -281,7 +281,7 @@ def history(conn: sqlite3.Connection, rule_id: int, code: str) -> list[sqlite3.R
 # 本组查询只服务 Web 列表与详情，不改事件流本身的写入口径。
 
 _ALERT_SELECT = """
-    SELECT e.*, r.type AS rule_type, r.name AS rule_name
+    SELECT e.*, r.type AS rule_type, r.name AS rule_name, r.window AS rule_window
     FROM rule_state_event e
     JOIN alert_rule r ON r.id = e.rule_id
 """
@@ -335,9 +335,10 @@ def unread_alert_count(conn: sqlite3.Connection) -> int:
 
 
 def get_alert(conn: sqlite3.Connection, alert_id: int) -> sqlite3.Row | None:
-    """单条预警（含所属规则的类型与名称）。解除记录不是预警，查不到。"""
+    """单条预警（含所属规则的类型与名称）。解除记录与回放记录都不是预警，查不到。"""
     return conn.execute(
-        _ALERT_SELECT + " WHERE e.id = ? AND e.event = 'enter'", (alert_id,)
+        _ALERT_SELECT + " WHERE e.id = ? AND e.event = 'enter' AND e.replayed = 0",
+        (alert_id,),
     ).fetchone()
 
 
@@ -348,9 +349,12 @@ def set_alert_read(
     *,
     timezone: str = "Asia/Shanghai",
 ) -> bool:
-    """切换单条已读/未读，返回是否命中一条预警。"""
+    """切换单条已读/未读，返回是否命中一条预警。回放记录不参与已读状态。"""
     cursor = conn.execute(
-        "UPDATE rule_state_event SET read_at = ? WHERE id = ? AND event = 'enter'",
+        """
+        UPDATE rule_state_event SET read_at = ?
+        WHERE id = ? AND event = 'enter' AND replayed = 0
+        """,
         (now_iso(timezone) if read else None, alert_id),
     )
     return cursor.rowcount == 1

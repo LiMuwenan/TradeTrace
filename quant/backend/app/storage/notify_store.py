@@ -148,6 +148,12 @@ def attempted_ids(conn: sqlite3.Connection, trade_date: str) -> set[int]:
     return {int(row[0]) for row in rows}
 
 
+def latest_attempt_date(conn: sqlite3.Connection) -> str | None:
+    """最近一次投递对应的交易日。上限按交易日计，展示用量也要用同一个日期。"""
+    row = conn.execute("SELECT MAX(trade_date) FROM notification_log").fetchone()
+    return None if row is None or row[0] in (None, "") else str(row[0])
+
+
 def log_attempt(
     conn: sqlite3.Connection,
     *,

@@ -217,3 +217,15 @@ def test_read_toggle_missing_field_is_422(client, local_settings):
 
     assert response.status_code == 422
     assert response.json()["code"] == 422
+
+
+def test_replayed_record_is_not_an_alert(client, local_settings):
+    """静默回放产生的进入记录不是预警：既不能查详情，也不能被标已读。"""
+    rule_id = seed(local_settings)
+    add_event(local_settings, rule_id=rule_id, trade_date="2025-01-06", replayed=True)
+    conn = meta_db.connect(local_settings.meta_dir, local_settings.timezone)
+    replayed_id = int(rule_store.last_event(conn, CODE, rule_id)["id"])
+    conn.close()
+
+    assert client.get(f"/api/v1/alerts/{replayed_id}").status_code == 404
+    assert client.patch(f"/api/v1/alerts/{replayed_id}/read", json={"read": True}).status_code == 404

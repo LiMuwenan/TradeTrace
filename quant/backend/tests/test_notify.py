@@ -382,3 +382,33 @@ def test_log_endpoint_rejects_bad_paging(local_settings):
 
     assert client.get("/api/v1/notifications/log", params={"page": 0}).status_code == 400
     assert client.get("/api/v1/notifications/log", params={"pageSize": 0}).status_code == 400
+
+
+def test_blank_ntfy_server_falls_back_to_default(local_settings):
+    """服务地址没有「清空」语义：留空即恢复默认，不能落 None 后拼 URL 报错。"""
+    client = make_client(local_settings)
+
+    data = client.put("/api/v1/settings/notification", json={"ntfyServer": ""}).json()["data"]
+
+    assert data["ntfyServer"] == notify_store.DEFAULT_NTFY_SERVER
+
+
+def test_usage_follows_latest_attempt_date(local_settings):
+    """上限按交易日计，用量展示也要用交易日，而不是打开设置页那天的自然日。"""
+    save_config(local_settings, ntfy_topic="topic")
+    conn = meta_db.connect(local_settings.meta_dir, local_settings.timezone)
+    try:
+        notify_store.log_attempt(
+            conn,
+            event_id=None,
+            trade_date="2026-06-12",
+            channel="ntfy",
+            result=notify_store.RESULT_OK,
+            timezone=local_settings.timezone,
+        )
+    finally:
+        conn.close()
+
+    data = make_client(local_settings).get("/api/v1/settings/notification").json()["data"]
+
+    assert data["usage"]["date"] == "2026-06-12"

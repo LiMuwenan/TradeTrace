@@ -105,6 +105,10 @@ def _normalize_updates(updates: dict) -> dict:
             continue
         if field in STRING_FIELDS:
             text = "" if value is None else str(value).strip()
+            if field == "ntfy_server" and not text:
+                # 服务地址没有「清空」语义，留空即恢复默认，避免落 None 后拼 URL 报错
+                normalized[field] = notify_store.DEFAULT_NTFY_SERVER
+                continue
             normalized[field] = text or None
         elif value is not None:
             normalized[field] = value
@@ -130,10 +134,11 @@ def _validate(updates: dict) -> None:
 
 
 def _usage(conn, settings: Settings, config: notify_store.NotificationConfig) -> dict:
-    today = now_iso(settings.timezone)[:10]
+    """当日用量。上限按交易日计，所以展示的也必须是交易日而不是自然日。"""
+    trade_date = notify_store.latest_attempt_date(conn) or now_iso(settings.timezone)[:10]
     return {
-        "date": today,
-        "attempted": len(notify_store.attempted_ids(conn, today)),
+        "date": trade_date,
+        "attempted": len(notify_store.attempted_ids(conn, trade_date)),
         "limit": config.effective_limit(),
     }
 
