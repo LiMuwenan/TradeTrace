@@ -9,16 +9,21 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import data, health, watchlist
+from app.api import data, health, rules, watchlist
 from app.config import Settings, load_settings
 from app.schemas import fail
+from app.services.notify import Notifier, NullNotifier
 from app.storage.stock_names import BaostockNameProvider, StockNameCache
 from app.storage.watchlist_store import WatchlistCorruptError
 
 API_PREFIX = "/api/v1"
 
 
-def create_app(settings: Settings | None = None, stock_names: StockNameCache | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    stock_names: StockNameCache | None = None,
+    notifier: Notifier | None = None,
+) -> FastAPI:
     settings = settings or load_settings()
     _ensure_dirs_writable(settings)
 
@@ -31,6 +36,8 @@ def create_app(settings: Settings | None = None, stock_names: StockNameCache | N
     app.state.stock_names = stock_names or StockNameCache(
         settings.meta_dir, BaostockNameProvider()
     )
+    # 08 号票实现真实通道后替换；未配置时求值仍会落库，只是不投递（ADR 0008）
+    app.state.notifier = notifier or NullNotifier()
 
     app.add_middleware(
         CORSMiddleware,
@@ -55,6 +62,7 @@ def create_app(settings: Settings | None = None, stock_names: StockNameCache | N
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(data.router, prefix=API_PREFIX)
     app.include_router(watchlist.router, prefix=API_PREFIX)
+    app.include_router(rules.router, prefix=API_PREFIX)
     return app
 
 

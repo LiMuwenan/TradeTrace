@@ -80,6 +80,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m app          # 监听地址与端口取自 config/config.toml
 .\.venv\Scripts\python.exe -m app.import_history [历史目录]  # 默认读 config 的 raw_dir
 .\.venv\Scripts\python.exe -m app.daily_update [YYYY-MM-DD]  # 每日增量，默认今天
+.\.venv\Scripts\python.exe -m app.import_rules [规则 TOML]    # 导入种子规则（06 上线前的调试后门）
 
 # 前端（在 quant/web 下）
 npm install

@@ -76,3 +76,33 @@ def factor_frame(rows: list[tuple[str, str, float]]) -> pd.DataFrame:
         ],
         columns=FACTOR_COLUMNS,
     )
+
+
+def adj_bars(
+    prices: list[float],
+    *,
+    volumes: list[float] | None = None,
+    tradestatus: list[int] | None = None,
+    start: str = "2026-01-05",
+    code: str = "sh.600000",
+) -> list[dict]:
+    """构造 `ParquetStore.series()` 形状的行序列，因子为 1，故 adjClose == close。"""
+    from datetime import date, timedelta
+
+    day = date.fromisoformat(start)
+    rows: list[dict] = []
+    for index, price in enumerate(prices):
+        while day.weekday() >= 5:
+            day += timedelta(days=1)
+        rows.append(
+            {
+                "date": day.isoformat(),
+                "code": code,
+                "close": price,
+                "adjClose": price,
+                "volume": 1000.0 if volumes is None else volumes[index],
+                "tradestatus": 1 if tradestatus is None else tradestatus[index],
+            }
+        )
+        day += timedelta(days=1)
+    return rows
