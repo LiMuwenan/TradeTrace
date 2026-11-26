@@ -6,6 +6,7 @@ backend/.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest_tmp/
 
 # 前端
 web/node_modules/
