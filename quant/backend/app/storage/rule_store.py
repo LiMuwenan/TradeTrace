@@ -273,3 +273,96 @@ def history(conn: sqlite3.Connection, rule_id: int, code: str) -> list[sqlite3.R
         """,
         (rule_id, code),
     ).fetchall()
+
+
+# --- 预警阅读（07 号票）----------------------------------------------------
+#
+# 预警就是 event='enter' 且 replayed=0 的行；已读就是这行的 read_at。
+# 本组查询只服务 Web 列表与详情，不改事件流本身的写入口径。
+
+_ALERT_SELECT = """
+    SELECT e.*, r.type AS rule_type, r.name AS rule_name
+    FROM rule_state_event e
+    JOIN alert_rule r ON r.id = e.rule_id
+"""
+
+
+def list_alerts(
+    conn: sqlite3.Connection,
+    *,
+    read: bool | None = None,
+    code: str | None = None,
+    rule_type: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[sqlite3.Row], int]:
+    """预警列表与总数：按交易日倒序分页，默认排除静默回放产生的进入记录。"""
+    where = ["e.event = 'enter'", "e.replayed = 0"]
+    params: list[object] = []
+    if read is True:
+        where.append("e.read_at IS NOT NULL")
+    elif read is False:
+        where.append("e.read_at IS NULL")
+    if code:
+        where.append("e.code = ?")
+        params.append(code)
+    if rule_type:
+        where.append("r.type = ?")
+        params.append(rule_type)
+
+    clause = " WHERE " + " AND ".join(where)
+    total = conn.execute(
+        "SELECT COUNT(*) FROM rule_state_event e JOIN alert_rule r ON r.id = e.rule_id" + clause,
+        params,
+    ).fetchone()[0]
+    rows = conn.execute(
+        _ALERT_SELECT + clause + " ORDER BY e.trade_date DESC, e.id DESC LIMIT ? OFFSET ?",
+        [*params, page_size, (page - 1) * page_size],
+    ).fetchall()
+    return rows, int(total)
+
+
+def unread_alert_count(conn: sqlite3.Connection) -> int:
+    """未读预警数，口径与列表一致（排除回放）。"""
+    return int(
+        conn.execute(
+            """
+            SELECT COUNT(*) FROM rule_state_event
+            WHERE event = 'enter' AND replayed = 0 AND read_at IS NULL
+            """
+        ).fetchone()[0]
+    )
+
+
+def get_alert(conn: sqlite3.Connection, alert_id: int) -> sqlite3.Row | None:
+    """单条预警（含所属规则的类型与名称）。解除记录不是预警，查不到。"""
+    return conn.execute(
+        _ALERT_SELECT + " WHERE e.id = ? AND e.event = 'enter'", (alert_id,)
+    ).fetchone()
+
+
+def set_alert_read(
+    conn: sqlite3.Connection,
+    alert_id: int,
+    read: bool,
+    *,
+    timezone: str = "Asia/Shanghai",
+) -> bool:
+    """切换单条已读/未读，返回是否命中一条预警。"""
+    cursor = conn.execute(
+        "UPDATE rule_state_event SET read_at = ? WHERE id = ? AND event = 'enter'",
+        (now_iso(timezone) if read else None, alert_id),
+    )
+    return cursor.rowcount == 1
+
+
+def mark_all_alerts_read(conn: sqlite3.Connection, *, timezone: str = "Asia/Shanghai") -> int:
+    """一键全部已读，返回受影响条数。"""
+    cursor = conn.execute(
+        """
+        UPDATE rule_state_event SET read_at = ?
+        WHERE event = 'enter' AND replayed = 0 AND read_at IS NULL
+        """,
+        (now_iso(timezone),),
+    )
+    return cursor.rowcount

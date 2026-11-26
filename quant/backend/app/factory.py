@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.api import data, health, rules, watchlist
+from app.api import alerts, data, health, rules, watchlist
 from app.config import Settings, load_settings
 from app.schemas import fail
 from app.services.notify import Notifier, NullNotifier
@@ -63,6 +63,7 @@ def create_app(
     app.include_router(data.router, prefix=API_PREFIX)
     app.include_router(watchlist.router, prefix=API_PREFIX)
     app.include_router(rules.router, prefix=API_PREFIX)
+    app.include_router(alerts.router, prefix=API_PREFIX)
     return app
 
 
