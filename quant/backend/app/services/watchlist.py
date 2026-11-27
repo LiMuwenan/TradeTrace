@@ -52,6 +52,7 @@ def list_watchlist(settings: Settings, stock_names: StockNameCache) -> list[dict
                     entry,
                     index_quotes_map.get(entry.code),
                     catalog.get(entry.code) or entry.name,
+                    index_quotes.backfill_status(settings, entry.code),
                 )
             )
         else:
@@ -105,13 +106,10 @@ def add_to_watchlist(
 
     item = _with_quote(settings, entry)
     if resolved == KIND_INDEX:
-        try:
-            report = index_quotes.ensure_history(settings, code, fetcher)
-        except Exception as exc:  # noqa: BLE001 取数失败只降级，不撤销这次添加
-            item["historyError"] = str(exc)
-        else:
-            item = _with_quote(settings, entry)
-            item["historyRows"] = report.get("rows", 0)
+        # 回补放后台：首次要拉 20 年历史，几十秒的下装不能让「加入自选」这个请求等着
+        # （之前就是同步拉，前端看起来「点了没反应」，而且拉到 2014 年被数据源断连）
+        index_quotes.start_backfill(settings, code, fetcher)
+        item = _with_quote(settings, entry)
     return item, True
 
 
@@ -225,14 +223,17 @@ def _with_quote(settings: Settings, entry: WatchlistEntry) -> dict:
     if entry.kind == KIND_INDEX:
         quote = IndexStore(settings.index_parquet_dir).latest_bars([entry.code]).get(entry.code)
         name = load_catalog(settings.meta_dir).get(entry.code) or entry.name
-    else:
-        quote = ParquetStore(settings.parquet_dir).latest_bars([entry.code]).get(entry.code)
-        name = entry.name
-    return _to_item(entry, quote, name)
+        return _to_item(
+            entry, quote, name, index_quotes.backfill_status(settings, entry.code)
+        )
+    quote = ParquetStore(settings.parquet_dir).latest_bars([entry.code]).get(entry.code)
+    return _to_item(entry, quote, entry.name)
 
 
-def _to_item(entry: WatchlistEntry, quote: dict | None, name: str) -> dict:
-    return {
+def _to_item(
+    entry: WatchlistEntry, quote: dict | None, name: str, status: dict | None = None
+) -> dict:
+    item = {
         "code": entry.code,
         "name": name,
         "kind": entry.kind,
@@ -242,3 +243,9 @@ def _to_item(entry: WatchlistEntry, quote: dict | None, name: str) -> dict:
         "pctChg": quote["pctChg"] if quote else None,
         "suspended": bool(quote and quote["suspended"]),
     }
+    if entry.kind == KIND_INDEX:
+        # 后台回补的进度：没有数据时前端靠这个字段显示「回补中 / 补数据」，而不是空白
+        errors = (status or {}).get("errors") or []
+        item["historyPending"] = bool((status or {}).get("running"))
+        item["historyError"] = errors[0] if errors else None
+    return item

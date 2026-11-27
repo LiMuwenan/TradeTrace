@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import threading
+import time
+
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -74,7 +77,18 @@ def make_client(settings, fetcher: FakeIndexFetcher | None = None) -> TestClient
     )
 
 
-def test_add_index_backfills_history_and_lists_quote(local_settings):
+def wait_backfill(settings, code: str = CODE, timeout: float = 10.0) -> dict:
+    """等后台回补线程跑完（加入自选不再同步拉数据，测试要显式等）。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = index_quotes.backfill_status(settings, code)
+        if state is not None and not state["running"]:
+            return state
+        time.sleep(0.02)
+    raise AssertionError("指数回补未在超时内结束")
+
+
+def test_add_index_backfills_history_in_background(local_settings):
     fetcher = FakeIndexFetcher()
     client = make_client(local_settings, fetcher)
 
@@ -84,19 +98,26 @@ def test_add_index_backfills_history_and_lists_quote(local_settings):
     item = response.json()["data"]["item"]
     assert item["kind"] == KIND_INDEX
     assert item["name"] == "沪深300"
-    assert item["close"] == pytest.approx(102.0)
-    assert item["historyRows"] == 3
-    # 只按「这一只 + 一段区间」取，不拉全市场
-    assert [call[0] for call in fetcher.calls] == [CODE]
+    # 加入立刻返回：首次回补是后台任务，不该让请求等到数据下完
+    assert item["historyPending"] is True
+
+    state = wait_backfill(local_settings)
+    assert state["rows"] == 3
+    assert state["errors"] == []
+    # 只按「这一只 + 分段区间」取，不拉全市场
+    assert {call[0] for call in fetcher.calls} == {CODE}
+    assert len(fetcher.calls) > 1  # 20 年历史按段取，不是一次拉完
 
     listed = client.get("/api/v1/watchlist").json()["data"]["items"]
     assert [(entry["code"], entry["kind"]) for entry in listed] == [(CODE, KIND_INDEX)]
     assert listed[0]["close"] == pytest.approx(102.0)
+    assert listed[0]["historyPending"] is False
 
 
 def test_index_detail_is_point_price_without_adjust_basis(local_settings):
     client = make_client(local_settings, FakeIndexFetcher())
     client.post("/api/v1/watchlist", json={"code": CODE})
+    wait_backfill(local_settings)
 
     data = client.get(f"/api/v1/stocks/{CODE}/detail", params={"range": "all"}).json()["data"]
 
@@ -136,6 +157,7 @@ def test_explicit_index_kind_extends_catalog(local_settings):
     assert response.status_code == 200, response.text
     assert response.json()["data"]["item"]["kind"] == KIND_INDEX
     assert "sz.399005" in load_catalog(local_settings.meta_dir)
+    wait_backfill(local_settings, "sz.399005")
     # 清单扩展后，详情接口也能按指数口径查到
     detail = client.get("/api/v1/stocks/sz.399005/detail").json()["data"]
     assert detail["kind"] == "index"
@@ -228,3 +250,116 @@ def test_removing_index_keeps_its_history(local_settings):
     assert load_watchlist(local_settings.meta_dir) == []
     # 数据保留：重新添加时不必再联网
     assert IndexStore(local_settings.index_parquet_dir).series(CODE) != []
+
+
+class ChunkFetcher:
+    """每段返回一行；`fail_from_year` 之后开始抛错，模拟「取到 2014 年连接被关」。"""
+
+    def __init__(self, fail_from_year: int | None = None) -> None:
+        self.fail_from_year = fail_from_year
+        self.calls: list[tuple[str, str, str]] = []
+
+    def fetch_index_daily(self, code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        self.calls.append((code, start_date, end_date))
+        if self.fail_from_year is not None and int(start_date[:4]) >= self.fail_from_year:
+            raise IngestError("网络连接已关闭")
+        return pd.DataFrame(
+            [
+                {
+                    "date": start_date,
+                    "code": code,
+                    "open": "100.00",
+                    "high": "100.00",
+                    "low": "100.00",
+                    "close": "100.00",
+                    "preclose": "100.00",
+                    "volume": "1000",
+                    "amount": "1000000",
+                    "pctChg": "0.0",
+                }
+            ],
+            columns=INDEX_COLUMNS,
+        )
+
+
+def test_backfill_chunks_by_five_years(local_settings):
+    fetcher = ChunkFetcher()
+
+    index_quotes.ensure_history(local_settings, CODE, fetcher)
+
+    starts = [call[1] for call in fetcher.calls]
+    assert starts[0] == index_quotes.HISTORY_START
+    # 段长不超过 CHUNK_YEARS 年：2006→2010、2011→2015……
+    first_start, first_end = fetcher.calls[0][1], fetcher.calls[0][2]
+    assert int(first_end[:4]) - int(first_start[:4]) + 1 == index_quotes.CHUNK_YEARS
+    assert len(fetcher.calls) >= 4
+
+
+def test_backfill_keeps_progress_and_resumes_after_socket_close(local_settings):
+    """一段失败不能丢掉它之前的进度；换回正常数据源后从断点继续补。"""
+    report = index_quotes.ensure_history(local_settings, CODE, ChunkFetcher(fail_from_year=2016))
+
+    store = IndexStore(local_settings.index_parquet_dir)
+    assert report["rows"] == 2  # 2006、2011 两段已入库
+    assert report["errors"] and "网络连接已关闭" in report["errors"][0]
+    assert store.last_date(CODE) == "2011-01-01"
+
+    resume = ChunkFetcher()
+    again = index_quotes.ensure_history(local_settings, CODE, resume)
+
+    assert again["errors"] == []
+    assert again["rows"] > 0
+    assert store.last_date(CODE) >= "2026-01-01"
+    # 续补从断点之后开始，不把最早那段重拉一遍
+    assert resume.calls[0][1] > index_quotes.HISTORY_START
+
+
+def test_index_fetches_are_serialized(local_settings):
+    """baostock 是进程级全局 socket：并发取数会互相踢会话，必须排队。"""
+    active = 0
+    peak = 0
+    guard = threading.Lock()
+
+    class ProbeFetcher:
+        def fetch_index_daily(self, code, start_date, end_date):
+            nonlocal active, peak
+            with guard:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.05)
+            with guard:
+                active -= 1
+            return pd.DataFrame(columns=INDEX_COLUMNS)
+
+    threads = [
+        threading.Thread(
+            target=index_quotes.sync_range,
+            args=(local_settings, CODE, "2026-01-05", "2026-01-05", ProbeFetcher()),
+        )
+        for _ in range(3)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert peak == 1
+
+
+def test_history_endpoint_starts_backfill_without_watchlist_entry(local_settings):
+    client = make_client(local_settings, FakeIndexFetcher())
+
+    response = client.post(f"/api/v1/stocks/{CODE}/history")
+
+    assert response.status_code == 202, response.text
+    assert response.json()["data"]["running"] is True
+    assert wait_backfill(local_settings)["rows"] == 3
+
+
+def test_history_endpoint_rejects_stock_code(local_settings):
+    client = make_client(local_settings)
+
+    response = client.post("/api/v1/stocks/sh.600000/history")
+
+    assert response.status_code == 404
+    assert "不是已知的指数" in response.json()["message"]

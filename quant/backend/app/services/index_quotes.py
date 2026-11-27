@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -31,6 +33,22 @@ logger = logging.getLogger(__name__)
 # 指数历史起点：baostock 的指数日线自 2006 年起，早于这个日期没有数据
 HISTORY_START = "2006-01-01"
 
+# baostock 客户端是**进程级全局 socket**：并发登录会互相踢会话，取数也可能互相打断。
+# 所以所有指数取数都排队走这一把锁（可重入，供「回补里套单段取数」使用）。
+_FETCH_LOCK = threading.RLock()
+
+# 单次区间取数的跨度上限。整段 2006→今天一次拉完，数据源会中途把连接关掉
+# （实测取到 2014 年断开）；切成 5 年一段，每段单独成功、单独落盘，失败也能接着补。
+CHUNK_YEARS = 5
+
+# 单段失败重试：连接被关掉是暂时性的，隔一会儿重试通常就能过
+CHUNK_RETRIES = 2
+RETRY_DELAY_SECONDS = 1.5
+
+# 后台回补的运行态：键是「数据目录 + 代码」，避免不同配置的测试互相干扰
+_STATE_LOCK = threading.Lock()
+_RUNNING: dict[str, dict] = {}
+
 
 def sync_range(
     settings: Settings,
@@ -39,9 +57,13 @@ def sync_range(
     end_date: str,
     fetcher: IndexFetcher | None = None,
 ) -> dict:
-    """取单只指数在 [start_date, end_date] 的日线并入库，返回本次写入摘要。"""
+    """取单只指数在 [start_date, end_date] 的日线并入库，返回本次写入摘要。
+
+    调用方不必自己加锁：这里会排队，保证进程内同一时刻只有一路在跟数据源说话。
+    """
     code = normalize_index_code(raw_code)
-    frame = (fetcher or BaostockIndexFetcher()).fetch_index_daily(code, start_date, end_date)
+    with _FETCH_LOCK:
+        frame = (fetcher or BaostockIndexFetcher()).fetch_index_daily(code, start_date, end_date)
     normalized = normalize_index_frame(frame, code=code, start_date=start_date, end_date=end_date)
     written = IndexStore(settings.index_parquet_dir).merge(code, normalized)
     return {"code": code, "rows": written, "start": start_date, "end": end_date}
@@ -77,15 +99,157 @@ def normalize_index_frame(
 def ensure_history(
     settings: Settings, raw_code: str, fetcher: IndexFetcher | None = None
 ) -> dict:
-    """补齐该指数到今天的全部历史：首次从 2006 年起拉，之后只补最后一条之后的缺口。"""
+    """补齐该指数到今天的全部历史：首次从 2006 年起拉，之后只补最后一条之后的缺口。
+
+    按 `CHUNK_YEARS` 切段，每段独立成功、独立落盘：整段一次拉完会在中途被数据源关掉
+    连接（实测取到 2014 年断开），而分段后失败点之前的进度都是真的，下次接着补即可。
+    某一段重试仍失败就停下——后面的段依赖同一条连接，继续只会拿到同样的错。
+    """
     code = normalize_index_code(raw_code)
     store = IndexStore(settings.index_parquet_dir)
     last = store.last_date(code)
     start = _next_day(last) if last else HISTORY_START
     end = datetime.now(ZoneInfo(settings.timezone)).date().isoformat()
     if start > end:
-        return {"code": code, "rows": 0, "start": start, "end": end, "upToDate": True}
-    return {**sync_range(settings, code, start, end, fetcher), "upToDate": False}
+        return {
+            "code": code,
+            "rows": 0,
+            "start": start,
+            "end": end,
+            "lastDate": last,
+            "chunks": 0,
+            "errors": [],
+            "upToDate": True,
+        }
+
+    chunks = _chunks(start, end)
+    rows = 0
+    errors: list[str] = []
+    for chunk_start, chunk_end in chunks:
+        try:
+            rows += _sync_chunk(settings, code, chunk_start, chunk_end, fetcher)
+        except Exception as exc:  # noqa: BLE001 保留已入库的段，把失败点报给上层
+            logger.warning("指数 %s 在 %s~%s 取数失败：%s", code, chunk_start, chunk_end, exc)
+            errors.append(f"{chunk_start}~{chunk_end}：{exc}")
+            break
+
+    return {
+        "code": code,
+        "rows": rows,
+        "start": start,
+        "end": end,
+        "lastDate": store.last_date(code),
+        "chunks": len(chunks),
+        "errors": errors,
+        "upToDate": False,
+    }
+
+
+def start_backfill(
+    settings: Settings, raw_code: str, fetcher: IndexFetcher | None = None
+) -> dict:
+    """在后台补齐历史，立刻返回状态：加入自选不该等几分钟的数据下载。
+
+    同一只指数同时只跑一个回补任务，重复调用返回同一个运行态。
+    """
+    code = normalize_index_code(raw_code)
+    key = _state_key(settings, code)
+    with _STATE_LOCK:
+        running = _RUNNING.get(key)
+        if running and running["running"]:
+            return dict(running)
+        state = {
+            "code": code,
+            "running": True,
+            "rows": 0,
+            "errors": [],
+            "lastDate": None,
+            "startedAt": datetime.now(ZoneInfo(settings.timezone)).isoformat(timespec="seconds"),
+            "finishedAt": None,
+        }
+        _RUNNING[key] = state
+
+    threading.Thread(
+        target=_run_backfill,
+        args=(key, settings, code, fetcher),
+        name=f"index-backfill-{code}",
+        daemon=True,
+    ).start()
+    return dict(state)
+
+
+def backfill_status(settings: Settings, raw_code: str) -> dict | None:
+    """该指数最近一次后台回补的状态；没有跑过返回 None。"""
+    try:
+        code = normalize_index_code(raw_code)
+    except IngestError:
+        return None
+    with _STATE_LOCK:
+        state = _RUNNING.get(_state_key(settings, code))
+        return None if state is None else dict(state)
+
+
+def _run_backfill(
+    key: str, settings: Settings, code: str, fetcher: IndexFetcher | None
+) -> None:
+    try:
+        report = ensure_history(settings, code, fetcher)
+    except Exception as exc:  # noqa: BLE001 后台任务不能把异常丢给无人接的线程
+        logger.warning("指数 %s 回补失败：%s", code, exc)
+        with _STATE_LOCK:
+            state = _RUNNING.get(key) or {"code": code}
+            _RUNNING[key] = {
+                **state,
+                "running": False,
+                "errors": [str(exc)],
+                "finishedAt": datetime.now(ZoneInfo(settings.timezone)).isoformat(
+                    timespec="seconds"
+                ),
+            }
+        return
+
+    with _STATE_LOCK:
+        _RUNNING[key] = {
+            "code": code,
+            "running": False,
+            "rows": report.get("rows", 0),
+            "errors": report.get("errors", []),
+            "lastDate": report.get("lastDate"),
+            "startedAt": (_RUNNING.get(key) or {}).get("startedAt"),
+            "finishedAt": datetime.now(ZoneInfo(settings.timezone)).isoformat(timespec="seconds"),
+        }
+
+
+def _sync_chunk(
+    settings: Settings, code: str, start_date: str, end_date: str, fetcher: IndexFetcher | None
+) -> int:
+    """取一段，失败重试；仍失败则抛出，由调用方决定停在哪。"""
+    last_error: Exception | None = None
+    for attempt in range(1, CHUNK_RETRIES + 1):
+        try:
+            return sync_range(settings, code, start_date, end_date, fetcher)["rows"]
+        except Exception as exc:  # noqa: BLE001 网络抖动重试一次，业务错误也走同一条路
+            last_error = exc
+            if attempt < CHUNK_RETRIES:
+                time.sleep(RETRY_DELAY_SECONDS)
+    assert last_error is not None
+    raise last_error
+
+
+def _chunks(start: str, end: str) -> list[tuple[str, str]]:
+    """把 [start, end] 按自然年切成不超过 `CHUNK_YEARS` 年的段。"""
+    chunks: list[tuple[str, str]] = []
+    cursor = date.fromisoformat(start)
+    limit = date.fromisoformat(end)
+    while cursor <= limit:
+        chunk_end = min(date(cursor.year + CHUNK_YEARS - 1, 12, 31), limit)
+        chunks.append((cursor.isoformat(), chunk_end.isoformat()))
+        cursor = chunk_end + timedelta(days=1)
+    return chunks
+
+
+def _state_key(settings: Settings, code: str) -> str:
+    return f"{settings.index_parquet_dir}|{code}"
 
 
 def sync_watchlist(
@@ -104,12 +268,13 @@ def sync_watchlist(
             continue
         start = _next_day(last) if last else HISTORY_START
         try:
-            result = sync_range(settings, code, start, trade_date, fetcher)
+            # 与回补同一套切段逻辑：首次加入的指数也按 5 年一段拉，避免一次拉 20 年被断连
+            for chunk_start, chunk_end in _chunks(start, trade_date):
+                rows += _sync_chunk(settings, code, chunk_start, chunk_end, fetcher)
         except Exception as exc:  # noqa: BLE001 指数取数失败只告警，不阻断收盘链
             logger.warning("%s 指数 %s 增量失败：%s", trade_date, code, exc)
             errors.append(f"{code}: {exc}")
             continue
-        rows += result["rows"]
         touched.append(code)
 
     return {"codes": len(codes), "touched": touched, "rows": rows, "errors": errors}

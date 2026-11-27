@@ -8,8 +8,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import ok
+from app.services import index_quotes
 from app.services import stock_detail as detail_service
 from app.services import watchlist as watchlist_service
+from app.storage.index_catalog import is_index_code
 from app.storage.schema import IngestError
 
 router = APIRouter(tags=["stocks"])
@@ -43,3 +45,19 @@ def stock_detail(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return ok(data)
+
+
+@router.post("/stocks/{code}/history", status_code=202)
+def start_index_history(request: Request, code: str) -> dict:
+    """在后台补齐某只指数的历史（加入自选时自动触发，失败后可从这里重试）。
+
+    只对指数开放：股票的行情由全市场日 K 一次入库，没有「按标的补历史」这回事。
+    """
+    settings = request.app.state.settings
+    if not is_index_code(settings.meta_dir, code):
+        raise HTTPException(status_code=404, detail=f"{code} 不是已知的指数")
+    try:
+        state = index_quotes.start_backfill(settings, code, request.app.state.index_fetcher)
+    except IngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ok(state)

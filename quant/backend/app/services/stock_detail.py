@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from app.config import Settings
+from app.services import index_quotes
 from app.storage.index_catalog import load_catalog
 from app.storage.index_store import IndexStore
 from app.storage.parquet_store import ParquetStore
@@ -127,7 +128,7 @@ def index_detail(
     bars = IndexStore(settings.index_parquet_dir).series(code)
     points = [bar for bar in bars if bar.get("close") is not None]
     if not points:
-        raise LookupError(f"{code} 暂无行情数据（可在自选里移除后重新添加以下载历史）")
+        raise LookupError(f"{code} 暂无行情数据（历史可能仍在后台回补，可在自选里点「补数据」重试）")
 
     moving = {str(window): _moving_average(points, window, "close") for window in MA_WINDOWS}
     start = _range_start(points, range_key)
@@ -154,6 +155,8 @@ def index_detail(
         "ma": {key: values[start:] for key, values in moving.items()},
         "maWindows": list(MA_WINDOWS),
         "adjustNote": INDEX_NOTE,
+        # 后台回补状态：页面据此显示「正在补历史」，而不是让人以为数据只有这么点
+        "history": index_quotes.backfill_status(settings, code),
     }
 
 
