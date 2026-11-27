@@ -26,10 +26,15 @@ def stock_search(request: Request, q: str = "", limit: int = 50) -> dict:
 
 
 @router.get("/stocks/{code}/detail")
-def stock_detail(request: Request, code: str, range: str = detail_service.DEFAULT_RANGE) -> dict:
+def stock_detail(
+    request: Request,
+    code: str,
+    range: str = detail_service.DEFAULT_RANGE,
+    adjust: str = detail_service.DEFAULT_ADJUST,
+) -> dict:
     try:
         data = detail_service.stock_detail(
-            request.app.state.settings, request.app.state.stock_names, code, range
+            request.app.state.settings, request.app.state.stock_names, code, range, adjust
         )
     except IngestError as exc:
         raise HTTPException(status_code=400, detail=CODE_FORMAT_MESSAGE) from exc

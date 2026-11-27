@@ -28,7 +28,9 @@ def make_client(settings) -> TestClient:
     return TestClient(create_app(settings, stock_names=cache))
 
 
-def ingest_bars(settings, tmp_path: Path, rows: list[dict], factor: float = 1.0) -> None:
+def ingest_bars(
+    settings, tmp_path: Path, rows: list[dict], factor: float = 1.0, event_index: int = -1
+) -> None:
     root = tmp_path / "history"
     for row in rows:
         write_daily(
@@ -39,13 +41,17 @@ def ingest_bars(settings, tmp_path: Path, rows: list[dict], factor: float = 1.0)
     # 因子事件必须落在「有前一日可比」的那天，否则首次除权无法校验，因子会保持原值。
     # factor == 1 时不写：凭空多一个除权事件会让 ingest 按「前收/preclose」反推比例，把价格整体缩放。
     if factor != 1.0:
-        write_yearly_factors(root, rows[-1]["date"][:4], [(CODE, rows[-1]["date"], factor)])
+        event_date = rows[event_index]["date"]
+        write_yearly_factors(root, event_date[:4], [(CODE, event_date, factor)])
     for row in rows:
         Ingestor(settings).ingest_day(row["date"], HistoricalCsvSource(root))
 
 
-def detail(client: TestClient, range_key: str = "all") -> dict:
-    response = client.get(f"/api/v1/stocks/{CODE}/detail", params={"range": range_key})
+def detail(client: TestClient, range_key: str = "all", adjust: str | None = None) -> dict:
+    params = {"range": range_key}
+    if adjust is not None:
+        params["adjust"] = adjust
+    response = client.get(f"/api/v1/stocks/{CODE}/detail", params=params)
     assert response.status_code == 200, response.text
     return response.json()["data"]
 
@@ -92,10 +98,37 @@ def test_prices_are_back_adjusted(local_settings, tmp_path):
 
     data = detail(make_client(local_settings))
 
+    assert data["adjust"] == "back"
     assert data["items"][-1]["close"] == pytest.approx(10.0)
     assert data["latest"]["close"] == pytest.approx(10.0)
+    assert data["latest"]["adjClose"] == pytest.approx(10.0)
     assert data["latest"]["rawClose"] == pytest.approx(5.0)  # 原始价另给，供对照行情软件
     assert "后复权" in data["adjustNote"]
+
+
+def test_raw_view_returns_exchange_prices(local_settings, tmp_path):
+    """不复权口径：图与顶部都是交易所原始价，后复权价仍一并返回供对照。"""
+    rows = adj_bars([10, 5], code=CODE)
+    ingest_bars(local_settings, tmp_path, rows, factor=2.0)
+
+    data = detail(make_client(local_settings), adjust="raw")
+
+    assert data["adjust"] == "raw"
+    assert data["items"][-1]["close"] == pytest.approx(5.0)
+    assert data["latest"]["close"] == pytest.approx(5.0)
+    assert data["latest"]["rawClose"] == pytest.approx(5.0)
+    assert data["latest"]["adjClose"] == pytest.approx(10.0)
+    assert "不复权" in data["adjustNote"]
+
+
+def test_ma_follows_price_basis(local_settings, tmp_path):
+    """除权落在序列中间：后复权均线连续（10），不复权均线带真实断层（7）。"""
+    rows = adj_bars([10, 10, 10, 5, 5, 5], code=CODE)
+    ingest_bars(local_settings, tmp_path, rows, factor=2.0, event_index=3)
+    client = make_client(local_settings)
+
+    assert detail(client)["ma"]["5"][-1] == pytest.approx(10.0)
+    assert detail(client, adjust="raw")["ma"]["5"][-1] == pytest.approx(7.0)
 
 
 def test_range_trims_older_bars(local_settings, tmp_path):
@@ -171,6 +204,15 @@ def test_bad_range_is_400(local_settings):
 
     assert response.status_code == 400
     assert "未知的时间范围" in response.json()["message"]
+
+
+def test_bad_adjust_is_400(local_settings):
+    response = make_client(local_settings).get(
+        f"/api/v1/stocks/{CODE}/detail", params={"adjust": "forward"}
+    )
+
+    assert response.status_code == 400
+    assert "未知的价格口径" in response.json()["message"]
 
 
 def test_search_still_works_after_moving_route(local_settings):
