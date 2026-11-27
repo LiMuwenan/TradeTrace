@@ -1,0 +1,2 @@
+# 会话归档的本地绑定（每台机器不同），不入库
+docs/agent-log/.current-session.json
