@@ -57,10 +57,9 @@ data/raw/factors/YYYY.csv          按年归并的除权清单（历史目录叫
 data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_factor
 data/parquet/index/<code>.parquet 指数日线：一只一文件、10 列、无复权因子（ADR 0010）
 data/parquet/store_state.json     因子基准与最近一次导入结果
-data/meta/watchlist.json          自选清单（用户数据，不可从行情重建；条目带 kind=stock|index）
 data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单，只含股票）
 data/meta/index_catalog.json      指数清单：代码 → 名称（种子 8 条，可追加）
-data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录、daily_report 日报快照、pipeline_run / pipeline_stage 运行与阶段记录、pipeline_cursor 增量游标
+data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：watchlist 自选清单（用户数据，不可从行情重建；条目带 kind=stock|index）、alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录、daily_report 日报快照、pipeline_run / pipeline_stage 运行与阶段记录、pipeline_cursor 增量游标
 ```
 
 `meta.db` 只存用户记录，不存行情；行情仍在 Parquet。它是嵌入式单文件库，不是独立数据库服务。注意与 `lianghua/data/meta.db` 同名但**完全无关**，禁止跨项目读写（见仓库根 `AGENTS.md`）。
