@@ -25,8 +25,10 @@ from app.storage.watchlist_store import (
     KIND_STOCK,
     KINDS,
     WatchlistEntry,
+    get_entry,
     load_watchlist,
-    save_watchlist,
+    remove_entry,
+    upsert_entry,
 )
 
 MAX_SEARCH_LIMIT = 200
@@ -80,19 +82,18 @@ def add_to_watchlist(
         code = normalize_code(raw_code)
         name = stock_names.ensure().get(code, "")
 
-    entries = load_watchlist(settings.meta_dir)
-    existing = next((entry for entry in entries if entry.code == code), None)
+    existing = get_entry(settings.meta_dir, code)
     if existing is not None:
+        refreshed = existing
         if (name and name != existing.name) or existing.kind != resolved:
-            existing = WatchlistEntry(
+            refreshed = WatchlistEntry(
                 code=code,
                 name=name or existing.name,
                 added_at=existing.added_at,
                 kind=resolved,
             )
-            entries = [existing if entry.code == code else entry for entry in entries]
-            save_watchlist(settings.meta_dir, entries)
-        return _with_quote(settings, existing), False
+            upsert_entry(settings.meta_dir, refreshed)
+        return _with_quote(settings, refreshed), False
 
     entry = WatchlistEntry(
         code=code,
@@ -100,8 +101,7 @@ def add_to_watchlist(
         added_at=datetime.now(ZoneInfo(settings.timezone)).isoformat(timespec="seconds"),
         kind=resolved,
     )
-    entries.append(entry)
-    save_watchlist(settings.meta_dir, entries)
+    upsert_entry(settings.meta_dir, entry)
 
     item = _with_quote(settings, entry)
     if resolved == KIND_INDEX:
@@ -121,11 +121,8 @@ def remove_from_watchlist(settings: Settings, raw_code: str) -> tuple[str, bool]
     只删清单条目，不删已入库的指数行情：再添加回来是瞬时可见的，而重拉历史要联网。
     """
     candidates = _code_candidates(raw_code)
-    entries = load_watchlist(settings.meta_dir)
     for candidate in candidates:
-        remaining = [entry for entry in entries if entry.code != candidate]
-        if len(remaining) != len(entries):
-            save_watchlist(settings.meta_dir, remaining)
+        if remove_entry(settings.meta_dir, candidate):
             return candidate, True
     return candidates[0], False
 

@@ -55,6 +55,16 @@ CREATE INDEX IF NOT EXISTS idx_event_code_rule
 CREATE INDEX IF NOT EXISTS idx_event_alert_list
     ON rule_state_event (event, replayed, trade_date DESC);
 
+-- 自选清单：用户数据，全库唯一一份。顺序靠 sort_order——added_at 只到秒，
+-- 同一秒加入两只标的时它区分不出先后（2026-11-27 从 watchlist.json 迁入）
+CREATE TABLE IF NOT EXISTS watchlist (
+    code       TEXT    PRIMARY KEY,
+    name       TEXT    NOT NULL DEFAULT '',
+    kind       TEXT    NOT NULL DEFAULT 'stock' CHECK (kind IN ('stock', 'index')),
+    added_at   TEXT    NOT NULL,
+    sort_order INTEGER NOT NULL
+);
+
 -- 通知配置：单行（id = 1）。运行时由设置页修改，因此不放 config.toml（ADR 0009）
 CREATE TABLE IF NOT EXISTS notification_config (
     id            INTEGER PRIMARY KEY CHECK (id = 1),

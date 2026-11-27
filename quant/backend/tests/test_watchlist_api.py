@@ -2,6 +2,9 @@
 """自选接口：增删、行情摘要、搜索、持久化与停牌口径。"""
 from __future__ import annotations
 
+import json
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,6 +13,7 @@ from app.storage.ingest import Ingestor
 from app.storage.schema import IngestError
 from app.storage.sources import HistoricalCsvSource
 from app.storage.stock_names import StockNameCache
+from app.storage.watchlist_store import WatchlistEntry, load_watchlist, save_watchlist
 from factories import TRADE_DATE, bar, write_daily
 
 NAMES = {
@@ -147,6 +151,89 @@ def test_corrupt_watchlist_is_reported_and_not_overwritten(local_settings):
     assert added.status_code == 500
     # 损坏文件必须原样保留，不能被空清单覆盖
     assert path.read_text(encoding="utf-8") == "{ 不是合法 JSON"
+
+
+def test_legacy_watchlist_json_is_migrated_once(local_settings):
+    """旧 watchlist.json 在首次读取时导入 meta.db，原文件改名保留。"""
+    legacy = local_settings.meta_dir / "watchlist.json"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {"code": "sh.600519", "name": "贵州茅台", "addedAt": "2026-01-01T00:00:00+08:00"},
+                    {
+                        "code": "sh.000300",
+                        "name": "沪深300",
+                        "addedAt": "2026-01-02T00:00:00+08:00",
+                        "kind": "index",
+                    },
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    client = make_client(local_settings)
+
+    items = client.get("/api/v1/watchlist").json()["data"]["items"]
+
+    # 顺序与旧文件一致，kind 也带过来了（旧条目无 kind 时按股票）
+    assert [(item["code"], item["kind"]) for item in items] == [
+        ("sh.600519", "stock"),
+        ("sh.000300", "index"),
+    ]
+    assert not legacy.exists()
+    assert (local_settings.meta_dir / "watchlist.json.migrated").is_file()
+
+
+def test_cleared_watchlist_is_not_reimported_from_legacy_file(local_settings):
+    """迁移后清空自选必须保持为空——改名旧文件就是为了挡住这条回头路。"""
+    legacy = local_settings.meta_dir / "watchlist.json"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(
+        json.dumps({"items": [{"code": "sh.600000", "name": "浦发银行", "addedAt": ""}]}),
+        encoding="utf-8",
+    )
+    client = make_client(local_settings)
+    client.delete("/api/v1/watchlist/sh.600000")
+
+    assert client.get("/api/v1/watchlist").json()["data"]["items"] == []
+
+
+def test_watchlist_rows_live_in_meta_db(local_settings, tmp_path):
+    import_bars(local_settings, tmp_path, [bar(TRADE_DATE, "sh.600000", 10.5)])
+    client = make_client(local_settings)
+
+    client.post("/api/v1/watchlist", json={"code": "sh.600000"})
+
+    conn = sqlite3.connect(local_settings.meta_dir / "meta.db")
+    try:
+        rows = conn.execute("SELECT code, name, kind, sort_order FROM watchlist").fetchall()
+    finally:
+        conn.close()
+    assert rows == [("sh.600000", "浦发银行", "stock", 1)]
+    # 不再回写 JSON，自选只有 meta.db 一处
+    assert not (local_settings.meta_dir / "watchlist.json").exists()
+
+
+def test_save_watchlist_replaces_everything(local_settings):
+    save_watchlist(
+        local_settings.meta_dir,
+        [WatchlistEntry("sh.600000", "浦发银行", "2026-01-01T00:00:00+08:00")],
+    )
+    save_watchlist(
+        local_settings.meta_dir,
+        [
+            WatchlistEntry("sh.600519", "贵州茅台", "2026-01-02T00:00:00+08:00"),
+            WatchlistEntry("sh.000300", "沪深300", "2026-01-03T00:00:00+08:00", "index"),
+        ],
+    )
+
+    entries = load_watchlist(local_settings.meta_dir)
+
+    assert [entry.code for entry in entries] == ["sh.600519", "sh.000300"]
+    assert entries[1].kind == "index"
 
 
 def test_add_rejects_invalid_code_with_unified_error(local_settings):
