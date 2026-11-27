@@ -110,7 +110,7 @@ def load_settings(config_path: Path | str | None = None) -> Settings:
         port=port,
         raw_dir=_resolve_dir(_env("QUANT_RAW_DIR") or data.get("raw_dir", "data/raw")),
         parquet_dir=_resolve_dir(
-            _env("QUANT_PARQUET_DIR") or data.get("parquet_dir", "data/parquet")
+            _env("QUANT_PARQUET_DIR") or data.get("parquet_dir", "data/market")
         ),
         # 用户数据与字典缓存（自选清单、股票名称），与可重建的 Parquet 分开
         meta_dir=_resolve_dir(_env("QUANT_META_DIR") or data.get("meta_dir", "data/meta")),

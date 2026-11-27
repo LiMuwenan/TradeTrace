@@ -9,7 +9,7 @@ port = 8000
 # 以下三项也可用环境变量覆盖：QUANT_RAW_DIR / QUANT_PARQUET_DIR / QUANT_META_DIR
 raw_dir = "data/raw"
 # 按年份分区的 Parquet：由原始数据派生的索引
-parquet_dir = "data/parquet"
+parquet_dir = "data/market"
 # 用户数据与字典缓存：自选清单、股票名称，不随 Parquet 重建而丢失
 meta_dir = "data/meta"
 

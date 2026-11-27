@@ -12,7 +12,7 @@ port = 8123
 
 [data]
 raw_dir = "data/raw"
-parquet_dir = "data/parquet"
+parquet_dir = "data/market"
 
 [app]
 timezone = "Asia/Shanghai"

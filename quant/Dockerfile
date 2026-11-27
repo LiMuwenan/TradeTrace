@@ -23,7 +23,7 @@ ENV PYTHONUNBUFFERED=1 \
     QUANT_HOST=0.0.0.0 \
     QUANT_PORT=8000 \
     QUANT_RAW_DIR=/data/raw \
-    QUANT_PARQUET_DIR=/data/parquet \
+    QUANT_PARQUET_DIR=/data/market \
     QUANT_META_DIR=/data/meta
 
 # zoneinfo 需要系统时区库；pyarrow / duckdb / pandas 均用 manylinux wheel，不需要编译工具链

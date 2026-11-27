@@ -41,7 +41,7 @@ services:
       QUANT_PORT: "8000"
       # 三个目录都是 /data 的子目录，只换名字，不换前缀
       QUANT_RAW_DIR: "/data/${RAW_SUBDIR:-raw}"
-      QUANT_PARQUET_DIR: "/data/${PARQUET_SUBDIR:-parquet}"
+      QUANT_PARQUET_DIR: "/data/${PARQUET_SUBDIR:-market}"
       QUANT_META_DIR: "/data/${META_SUBDIR:-meta}"
       TZ: Asia/Shanghai
     volumes:

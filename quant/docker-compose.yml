@@ -27,14 +27,14 @@ services:
       QUANT_HOST: 0.0.0.0
       QUANT_PORT: "8000"
       QUANT_RAW_DIR: /data/raw
-      QUANT_PARQUET_DIR: /data/parquet
+      QUANT_PARQUET_DIR: /data/market
       QUANT_META_DIR: /data/meta
       TZ: Asia/Shanghai
     volumes:
       # 原始 CSV：不可变事实源，读写都要（导入与增量取数会写）
       - "${RAW_DIR_HOST:-./data/raw}:/data/raw"
       # 派生 Parquet：由原始数据重建，读写都要
-      - "${PARQUET_DIR_HOST:-./data/parquet}:/data/parquet"
+      - "${PARQUET_DIR_HOST:-./data/market}:/data/market"
       # 用户记录库 meta.db：规则、预警、通知配置、日报快照，丢了就找不回
       - "${META_DIR_HOST:-./data/meta}:/data/meta"
     # 宿主机目录属主不是 10001 又不想 chown 时，用这个对齐（Linux 常见）

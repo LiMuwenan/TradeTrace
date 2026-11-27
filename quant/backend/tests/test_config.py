@@ -18,7 +18,7 @@ def _write(tmp_path, text):
 def test_loads_and_resolves_dirs_against_project_root(settings):
     assert settings.host == "127.0.0.1"
     assert settings.port == 8123
-    assert settings.parquet_dir == (PROJECT_ROOT / "data/parquet").resolve()
+    assert settings.parquet_dir == (PROJECT_ROOT / "data/market").resolve()
     assert settings.raw_dir == (PROJECT_ROOT / "data/raw").resolve()
     assert settings.meta_dir == (PROJECT_ROOT / "data/meta").resolve()
     assert settings.timezone == "Asia/Shanghai"
@@ -26,7 +26,7 @@ def test_loads_and_resolves_dirs_against_project_root(settings):
 
 def test_absolute_dirs_are_kept(tmp_path):
     absolute = (tmp_path / "elsewhere").resolve()
-    text = MINIMAL_CONFIG.replace('parquet_dir = "data/parquet"', f'parquet_dir = "{absolute.as_posix()}"')
+    text = MINIMAL_CONFIG.replace('parquet_dir = "data/market"', f'parquet_dir = "{absolute.as_posix()}"')
 
     settings = load_settings(_write(tmp_path, text))
 
@@ -37,7 +37,7 @@ def test_env_overrides_paths_and_port(config_path, monkeypatch, tmp_path):
     monkeypatch.setenv("QUANT_HOST", "0.0.0.0")
     monkeypatch.setenv("QUANT_PORT", "9000")
     monkeypatch.setenv("QUANT_RAW_DIR", str(tmp_path / "mnt" / "raw"))
-    monkeypatch.setenv("QUANT_PARQUET_DIR", str(tmp_path / "mnt" / "parquet"))
+    monkeypatch.setenv("QUANT_PARQUET_DIR", str(tmp_path / "mnt" / "market"))
     monkeypatch.setenv("QUANT_META_DIR", str(tmp_path / "mnt" / "meta"))
 
     settings = load_settings(config_path)
@@ -45,7 +45,7 @@ def test_env_overrides_paths_and_port(config_path, monkeypatch, tmp_path):
     assert settings.host == "0.0.0.0"
     assert settings.port == 9000
     assert settings.raw_dir == (tmp_path / "mnt" / "raw").resolve()
-    assert settings.parquet_dir == (tmp_path / "mnt" / "parquet").resolve()
+    assert settings.parquet_dir == (tmp_path / "mnt" / "market").resolve()
     assert settings.meta_dir == (tmp_path / "mnt" / "meta").resolve()
 
 
