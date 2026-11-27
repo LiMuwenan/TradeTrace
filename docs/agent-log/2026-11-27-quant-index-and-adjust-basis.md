@@ -1,15 +1,15 @@
 ---
 date: 2026-11-27
 session_id: 49d12792-8043-44d3-8ee4-4da5612f102d
-topic: quant 个股详情复权切换
+topic: quant 指数支持与复权口径切换
 started_at: 2026-11-27 09:37
-last_updated: 2026-11-27 09:37
+last_updated: 2026-11-27 11:29
 status: active # active | archived
 related_commits: []
 related_issues: []
 ---
 
-# quant 个股详情复权切换
+# quant 指数支持与复权口径切换
 
 > 归档规则：只记录对话中真实出现过的内容，每条附原文依据；不编造、不遗漏、不臆想、不添油加醋。
 
