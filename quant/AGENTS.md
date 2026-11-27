@@ -55,16 +55,19 @@ data/                 不入库：raw/ 原始 CSV 归档，parquet/ 按年分区
 data/raw/daily/YYYY-MM-DD.csv     全市场日 K 横截面（18 列，UTF-8 BOM）
 data/raw/factors/YYYY.csv          按年归并的除权清单（历史目录叫 factor/ 也兼容，旧的 YYYY-MM-DD.csv 仍可读）
 data/parquet/YYYY.parquet         派生索引：不复权 OHLCV + 每行 back_factor
+data/parquet/index/<code>.parquet 指数日线：一只一文件、10 列、无复权因子（ADR 0010）
 data/parquet/store_state.json     因子基准与最近一次导入结果
-data/meta/watchlist.json          自选清单（用户数据，不可从行情重建）
-data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单）
+data/meta/watchlist.json          自选清单（用户数据，不可从行情重建；条目带 kind=stock|index）
+data/meta/stock_names.json        代码 → 名称缓存（来自数据源证券清单，只含股票）
+data/meta/index_catalog.json      指数清单：代码 → 名称（种子 8 条，可追加）
 data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3）：alert_rule 规则定义、rule_state_event 触发态变更记录（预警即其中 event='enter' 且 replayed=0 的行）、notification_config 通知配置、notification_log 投递记录、daily_report 日报快照、pipeline_run / pipeline_stage 运行与阶段记录、pipeline_cursor 增量游标
 ```
 
 `meta.db` 只存用户记录，不存行情；行情仍在 Parquet。它是嵌入式单文件库，不是独立数据库服务。注意与 `lianghua/data/meta.db` 同名但**完全无关**，禁止跨项目读写（见仓库根 `AGENTS.md`）。
 
-所有**行情数据**入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开行情写路径。
+所有**股票行情**入库都必须经过 `app/storage/ingest.py` 的 `Ingestor`，不得另开行情写路径。
 实时抓取到的数据同样先归档成上面两份 CSV，再走同一条导入路径。
+**指数是唯一例外**：它走 `app/services/index_quotes.py` 的单只区间取数、直接落 `parquet/index/`，不归档原始 CSV、不经 `Ingestor`（列不同、没有因子，理由见 ADR 0010）。不要为了「统一」把指数塞进 `Ingestor`，也不要给指数加第三条取数路径。
 `data/meta/` 下的用户数据与字典缓存不属于行情数据，由各自的 store 原子写入。
 
 ## 边界
@@ -72,6 +75,8 @@ data/meta/meta.db                 用户记录库（SQLite，标准库 sqlite3�
 - **禁止 import 或引用 `lianghua/`、`everything/` 的源码与数据文件**；复用通过复制代码或重建数据实现，不跨项目共享。
 - 原始 CSV 是事实源，Parquet 是派生索引；**不得修改已归档的原始文件**。
 - 落盘只存不复权价与后复权因子，不存前复权数据。
+- **指数不进规则范围**：`rule_eval.scope_codes` 与 `rules._watchlist` 只取 `kind=stock` 的自选条目，指数也不能作为单只规则的目标。指数没有停牌标记与复权因子，让 05 的判定链认两种数据源等于把判定复制一遍（ADR 0010）。
+- **指数代码必须带市场前缀**：`normalize_index_code` 拒绝裸 6 位——`000001` 既可能是上证指数也可能是平安银行，推断必然出错。
 - **规则定义只有一个写入口：Web 的规则页**（`app/services/rules.py`）。05 号的 TOML 种子导入已随 06 上线删除，不要再加回配置文件写规则的第二条路径。
 - **整条收盘链只有一个入口：`app/services/pipeline.py` 的 `run`**。`app.daily_update` 只做增量取数，不要在那里补求值或推送，否则同一天会出现两条推送路径。
 - **定时只用进程内 `asyncio`（`app/services/scheduler.py`）**，不引 cron、不加调度框架；流水线是同步代码，到点后经 `asyncio.to_thread` 执行，不阻塞请求。
