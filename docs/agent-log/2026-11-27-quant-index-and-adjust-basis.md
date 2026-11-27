@@ -57,4 +57,17 @@ related_issues: []
 
 > 依据：用户「D:\Project\TradeTrace\docs\agent-log\2026-11-27-49d12792-....md 改名」；技能内约定「会话绑定关系保存在 docs/agent-log/.current-session.json，不要手工编辑或提交」。
 
+## 2026-11-27 14:02
+
+- **[决策·已定]** 自选清单从 `watchlist.json` **迁入 `meta.db`** 的 `watchlist` 表（`code` 主键、`name`、`kind`、`added_at`、`sort_order`）。理由：自选与规则/通知配置同属用户记录，放一处才能「备份只拷 meta.db」，也省掉自己手写的原子替换与损坏兜底。
+- **[决策·已定]** **`stock_names.json` 不搬**：它是可重建缓存（5224 条、TTL 一天、丢了自动重拉），不是用户记录；搬进库要每次刷新整表重写 5000+ 行，且 DB 损坏时连名称一起没。
+- **[决策·已定]** 排序用显式 `sort_order`，不用 `added_at`——后者只有秒精度，同秒加入两只标的顺序不稳定。
+- **[决策·已定]** 迁移**只导入一次并改名**为 `watchlist.json.migrated`（保留原文件）：不改名的话，用户清空自选后表为空，旧文件会被再次导入、删掉的标的复活。
+- **[决策·已定]** `watchlist_store` 对外仍传 `meta_dir`、内部自开连接，新增 `get_entry`/`upsert_entry`/`remove_entry`；6 个只读调用方（自选、规则、求值、日报、个股详情、指数增量）零改动。
+- **[约束]** `WatchlistCorruptError` 与 factory 的 500 处理器保留，现在只服务「旧文件迁移失败」这一条路径。
+- **[事实]** 真实数据已迁移：`sh.600519 贵州茅台 stock`、`sh.000300 沪深300 index`，`sort_order` 1/2，原文件保留为 `watchlist.json.migrated`。
+- **[风险]** 自选不再能手改文件，要改得进 SQLite；`stock_detail`/`index_quotes` 这两个原本不碰 `meta.db` 的模块现在也依赖它。
+
+> 依据：用户「现在只搬watchlist，动手改」；用户「这两个json文件在管理什么，能写进meta.db吗」；Agent「建议只搬 watchlist、留着 stock_names」。
+
 <!-- 归档总结（snapshot）追加在本文件最末尾，位于所有时间戳记录之后；重新 snapshot 时整节替换，不触碰上方记录。 -->
