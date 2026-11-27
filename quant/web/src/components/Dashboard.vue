@@ -3,9 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot, AccordionTrigger } from 'reka-ui'
 import {
-  Activity, BarChart3, Bell, ChevronDown, ChevronRight, CircleHelp, Database,
-  ExternalLink, FileText, Home, LifeBuoy, ListFilter, Menu, PanelLeftClose, RefreshCw,
-  Search, Settings2, Star,
+  Activity, ChevronDown, ChevronRight, CircleHelp, Database, Home, LifeBuoy, Menu,
+  RefreshCw, Search, Settings2, Star,
 } from 'lucide-vue-next'
 import {
   addToWatchlist, fetchAlerts, fetchDataStatus, fetchHealth, fetchWatchlist,
@@ -20,10 +19,10 @@ import CardDescription from './ui/CardDescription.vue'
 import CardHeader from './ui/CardHeader.vue'
 import CardTitle from './ui/CardTitle.vue'
 import Input from './ui/Input.vue'
+import SideNav from './SideNav.vue'
 
 const router = useRouter()
 
-const activeNav = ref('控制台')
 const sidebarCollapsed = ref(false)
 const unreadAlerts = ref(0)
 
@@ -205,43 +204,6 @@ function quoteClass(item) {
   return item.pctChg > 0 ? 'text-up' : 'text-down'
 }
 
-const navGroups = [
-  {
-    label: '工作区',
-    items: [
-      { label: '控制台', icon: Home, active: true },
-    ],
-  },
-  {
-    label: '数据',
-    items: [
-      { label: '服务状态', icon: Activity, target: 'health' },
-      { label: '自选', icon: Star, target: 'watchlist' },
-      { label: '数据状态', icon: Database, target: 'data-status' },
-      { label: '运行记录', icon: RefreshCw, to: '/pipeline' },
-    ],
-  },
-  {
-    label: '预警与规则',
-    items: [
-      { label: '规则', icon: ListFilter, to: '/rules' },
-      { label: '预警列表', icon: Bell, to: '/alerts' },
-      { label: '日报', icon: FileText, to: '/reports' },
-      { label: '通知设置', icon: Settings2, to: '/settings/notification' },
-    ],
-  },
-  {
-    label: '资源',
-    items: [
-      { label: '返回首页', icon: ExternalLink, leave: true },
-    ],
-  },
-]
-
-function goTo(target) {
-  document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 async function loadUnread() {
   try {
     const data = await fetchAlerts({ pageSize: 1, read: false })
@@ -260,67 +222,7 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-secondary/40">
-    <aside
-      :class="cn(
-        'fixed inset-y-0 left-0 z-30 flex flex-col border-r bg-background transition-all duration-200',
-        sidebarCollapsed ? 'w-[68px]' : 'w-[228px]'
-      )"
-    >
-      <div class="flex h-14 items-center gap-2 border-b px-4">
-        <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground">Q</span>
-        <div v-if="!sidebarCollapsed" class="leading-tight">
-          <p class="text-sm font-semibold">Quant Platform</p>
-          <p class="text-[11px] text-muted-foreground">A 股数据分析</p>
-        </div>
-      </div>
-
-      <div class="px-3 py-3">
-        <div v-if="!sidebarCollapsed" class="flex items-center gap-2 rounded-lg border bg-background px-2.5 py-2 text-xs text-muted-foreground shadow-sm">
-          <Search class="h-3.5 w-3.5" />
-          <span class="flex-1">搜索</span>
-          <kbd class="rounded border bg-secondary px-1.5 py-0.5 font-mono text-[10px]">⌘K</kbd>
-        </div>
-        <div v-else class="grid h-9 place-items-center">
-          <Search class="h-4 w-4 text-muted-foreground" />
-        </div>
-      </div>
-
-      <nav class="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
-        <div v-for="group in navGroups" :key="group.label">
-          <p v-if="!sidebarCollapsed" class="mb-1.5 px-2 text-[11px] font-medium text-muted-foreground">{{ group.label }}</p>
-          <button
-            v-for="item in group.items"
-            :key="item.label"
-            :title="item.label"
-            class="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-            :class="[
-              item.active && activeNav === item.label ? 'bg-accent font-medium text-accent-foreground' : 'text-foreground/80',
-              sidebarCollapsed ? 'justify-center' : ''
-            ]"
-            @click="item.leave ? router.push('/') : (item.to ? router.push(item.to) : (item.target ? goTo(item.target) : (activeNav = item.label)))"
-          >
-            <component :is="item.icon" class="h-4 w-4 shrink-0" />
-            <span v-if="!sidebarCollapsed" class="flex-1 truncate">{{ item.label }}</span>
-            <span
-              v-if="item.to === '/alerts' && unreadAlerts && !sidebarCollapsed"
-              class="rounded-full bg-warning-soft px-1.5 text-[11px] font-medium text-warning"
-            >{{ unreadAlerts }}</span>
-            <ChevronRight v-if="!sidebarCollapsed && item.leave" class="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        </div>
-      </nav>
-
-      <div class="border-t p-3">
-        <button
-          class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          :class="sidebarCollapsed ? 'justify-center' : ''"
-          @click="sidebarCollapsed = !sidebarCollapsed"
-        >
-          <PanelLeftClose class="h-4 w-4" />
-          <span v-if="!sidebarCollapsed">收起侧栏</span>
-        </button>
-      </div>
-    </aside>
+    <SideNav v-model:collapsed="sidebarCollapsed" :unread="unreadAlerts" />
 
     <div :class="cn('transition-all duration-200', sidebarCollapsed ? 'pl-[68px]' : 'pl-[228px]')">
       <header class="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/90 px-6 backdrop-blur">

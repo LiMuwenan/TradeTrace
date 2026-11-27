@@ -32,5 +32,10 @@ const routes = [
 export default createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    // 控制台内的分区锚点（#health / #watchlist / #data-status）：滚到对应卡片，留出 sticky 顶栏
+    if (to.hash) return { el: to.hash, top: 72, behavior: 'smooth' }
+    return { top: 0 }
+  },
 })
