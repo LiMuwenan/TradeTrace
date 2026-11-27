@@ -1,5 +1,7 @@
 # 只运行 CI 已推送的镜像，不在本地构建；适合部署机 / NAS / 另一台电脑。
 #
+# 默认拉 latest（固定标签，每次 main 构建覆盖）：
+#   docker compose -f docker-compose.deploy.yml pull
 #   docker compose -f docker-compose.deploy.yml up -d
 #   docker compose -f docker-compose.deploy.yml logs -f
 #   docker compose -f docker-compose.deploy.yml down
@@ -19,7 +21,7 @@
 
 services:
   quant:
-    image: "ghcr.io/limuwenan/tradetrace/quant:${TAG:-main}"
+    image: "ghcr.io/limuwenan/tradetrace/quant:${TAG:-latest}"
     container_name: quant
     ports:
       # 左边是宿主机端口，右边固定 8000（容器内由 QUANT_PORT 控制）

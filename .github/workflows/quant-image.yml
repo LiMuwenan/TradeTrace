@@ -98,15 +98,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 标签用 git SHA，可追溯到具体提交；再给分支名方便家用部署拉 main
+      # 标签固定为 latest，部署直接拉它；另留 sha-<commit> 用于回溯/回滚到具体提交
       - name: 生成标签与 OCI 元数据
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
+            type=raw,value=latest
             type=sha,prefix=sha-
-            type=ref,event=branch
           labels: |
             org.opencontainers.image.title=quant
             org.opencontainers.image.description=A 股量化数据分析与预警平台（只读行情，不接交易）

@@ -15,8 +15,8 @@
 
 services:
   quant:
-    # 默认用 CI 推到 GHCR 的 main 标签；本机改了代码就 `docker compose up -d --build` 重新构建
-    image: "${QUANT_IMAGE:-ghcr.io/limuwenan/tradetrace/quant:main}"
+    # 默认用 CI 推到 GHCR 的 latest（固定标签）；本机改了代码就 `docker compose up -d --build` 重新构建
+    image: "${QUANT_IMAGE:-ghcr.io/limuwenan/tradetrace/quant:latest}"
     build:
       context: .
       dockerfile: Dockerfile
