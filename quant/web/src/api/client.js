@@ -62,9 +62,11 @@ export function searchStocks(keyword) {
   return request(`/stocks/search?q=${encodeURIComponent(keyword)}`)
 }
 
-/** 个股详情：日 K 与均线，`range` 为 3m / 1y / all（04 号票）。 */
-export function fetchStockDetail(code, range = '1y') {
-  return request(`/stocks/${encodeURIComponent(code)}/detail?range=${encodeURIComponent(range)}`)
+/** 个股详情：日 K 与均线，`range` 为 3m / 1y / all，`adjust` 为 back（后复权）/ raw（不复权）（04 号票）。 */
+export function fetchStockDetail(code, range = '1y', adjust = 'back') {
+  const params = new URLSearchParams({ range })
+  params.set('adjust', adjust)
+  return request(`/stocks/${encodeURIComponent(code)}/detail?${params.toString()}`)
 }
 
 // --- 预警（07 号票）-------------------------------------------------------

@@ -21,12 +21,18 @@ const RANGES = [
   { key: '1y', label: '1 年' },
   { key: 'all', label: '全部' },
 ]
+// 默认后复权：与规则求值同口径；不复权用于和行情软件对价
+const ADJUSTS = [
+  { key: 'back', label: '后复权' },
+  { key: 'raw', label: '不复权' },
+]
 
 const route = useRoute()
 const router = useRouter()
 
 const code = computed(() => String(route.params.code || ''))
 const range = ref('1y')
+const adjust = ref('back')
 const activeMa = ref([...MA_WINDOWS])
 const data = ref(null)
 const loading = ref(false)
@@ -112,7 +118,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    data.value = await fetchStockDetail(code.value, range.value)
+    data.value = await fetchStockDetail(code.value, range.value, adjust.value)
     await nextTick()
     render()
   } catch (err) {
@@ -152,12 +158,20 @@ const changeClass = computed(() => {
   return value > 0 ? 'text-up' : 'text-down'
 })
 
+/** 顶部主价跟随所选口径，另一个口径降为对照小字——两个数都摆出来，用户不会以为哪里算错了。 */
+const adjustLabel = computed(() => (data.value?.adjust === 'raw' ? '不复权价' : '后复权价'))
+const otherLabel = computed(() => (data.value?.adjust === 'raw' ? '后复权' : '不复权'))
+const otherPrice = computed(() => {
+  const latest = data.value?.latest
+  if (!latest) return null
+  return data.value.adjust === 'raw' ? latest.adjClose : latest.rawClose
+})
+
 function onResize() {
   chart?.resize()
 }
 
-watch(range, load)
-watch(code, load)
+watch([range, adjust, code], load)
 
 onMounted(() => {
   load()
@@ -191,20 +205,34 @@ onBeforeUnmount(() => {
             <span class="text-xs text-muted-foreground">最近交易日 {{ data.latest.date }}</span>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">
-            后复权价<span v-if="data.latest.rawClose !== null"> · 不复权 {{ price(data.latest.rawClose) }}</span>
+            {{ adjustLabel }}<span v-if="otherPrice !== null"> · {{ otherLabel }} {{ price(otherPrice) }}</span>
           </p>
         </div>
 
-        <div class="flex items-center gap-1 rounded-lg border p-0.5">
-          <button
-            v-for="item in RANGES"
-            :key="item.key"
-            class="rounded-md px-3 py-1.5 text-sm transition-colors"
-            :class="range === item.key ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:text-foreground'"
-            @click="range = item.key"
-          >
-            {{ item.label }}
-          </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 rounded-lg border p-0.5">
+            <button
+              v-for="item in ADJUSTS"
+              :key="item.key"
+              class="rounded-md px-3 py-1.5 text-sm transition-colors"
+              :class="adjust === item.key ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:text-foreground'"
+              @click="adjust = item.key"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1 rounded-lg border p-0.5">
+            <button
+              v-for="item in RANGES"
+              :key="item.key"
+              class="rounded-md px-3 py-1.5 text-sm transition-colors"
+              :class="range === item.key ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:text-foreground'"
+              @click="range = item.key"
+            >
+              {{ item.label }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
