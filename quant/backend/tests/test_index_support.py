@@ -77,6 +77,13 @@ def make_client(settings, fetcher: FakeIndexFetcher | None = None) -> TestClient
     )
 
 
+@pytest.fixture(autouse=True)
+def _drain_backfills(local_settings):
+    """用例结束时等后台回补收尾：别让线程活到下一个用例或会话结束之后。"""
+    yield
+    assert index_quotes.wait_idle(local_settings, timeout=10.0), "后台回补未在超时内结束"
+
+
 def wait_backfill(settings, code: str = CODE, timeout: float = 10.0) -> dict:
     """等后台回补线程跑完（加入自选不再同步拉数据，测试要显式等）。"""
     deadline = time.monotonic() + timeout
@@ -98,7 +105,7 @@ def test_add_index_backfills_history_in_background(local_settings):
     item = response.json()["data"]["item"]
     assert item["kind"] == KIND_INDEX
     assert item["name"] == "沪深300"
-    # 加入立刻返回：首次回补是后台任务，不该让请求等到数据下完
+    # 加入立刻返回：首次回补是后台任务，响应里带的是「刚启动」那一刻的状态
     assert item["historyPending"] is True
 
     state = wait_backfill(local_settings)
@@ -242,6 +249,8 @@ def test_rule_cannot_target_index_directly(local_settings):
 def test_removing_index_keeps_its_history(local_settings):
     client = make_client(local_settings, FakeIndexFetcher())
     client.post("/api/v1/watchlist", json={"code": CODE})
+    # 先等后台写完再删：这条用例测的是「删自选不动行情」，不是「回补跑得够快」
+    wait_backfill(local_settings)
 
     response = client.delete(f"/api/v1/watchlist/{CODE}")
 

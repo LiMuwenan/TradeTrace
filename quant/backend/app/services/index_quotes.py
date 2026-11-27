@@ -189,6 +189,25 @@ def backfill_status(settings: Settings, raw_code: str) -> dict | None:
         return None if state is None else dict(state)
 
 
+def wait_idle(settings: Settings, timeout: float = 10.0) -> bool:
+    """等这个数据目录下所有后台回补跑完；超时返回 False。
+
+    测试用它在用例结束时收尾，避免后台线程写文件与临时目录清理撞车；
+    停机时也可以先调一次，让正在写的那一段落盘。
+    """
+    prefix = f"{settings.index_parquet_dir}|"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with _STATE_LOCK:
+            running = [
+                state for key, state in _RUNNING.items() if key.startswith(prefix) and state["running"]
+            ]
+        if not running:
+            return True
+        time.sleep(0.02)
+    return False
+
+
 def _run_backfill(
     key: str, settings: Settings, code: str, fetcher: IndexFetcher | None
 ) -> None:

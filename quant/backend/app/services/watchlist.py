@@ -104,13 +104,14 @@ def add_to_watchlist(
     )
     upsert_entry(settings.meta_dir, entry)
 
-    item = _with_quote(settings, entry)
     if resolved == KIND_INDEX:
         # 回补放后台：首次要拉 20 年历史，几十秒的下装不能让「加入自选」这个请求等着
         # （之前就是同步拉，前端看起来「点了没反应」，而且拉到 2014 年被数据源断连）
-        index_quotes.start_backfill(settings, code, fetcher)
-        item = _with_quote(settings, entry)
-    return item, True
+        state = index_quotes.start_backfill(settings, code, fetcher)
+        # 用 start_backfill 返回的那一刻状态回填，而不是再读一次：再读可能刚好碰上
+        # 后台已经跑完，响应就变成「没在回补」，前端不会开始轮询
+        return _with_quote(settings, entry, status=state), True
+    return _with_quote(settings, entry), True
 
 
 def remove_from_watchlist(settings: Settings, raw_code: str) -> tuple[str, bool]:
@@ -219,12 +220,15 @@ def _code_candidates(raw_code: str) -> list[str]:
     return list(dict.fromkeys(candidates))
 
 
-def _with_quote(settings: Settings, entry: WatchlistEntry) -> dict:
+def _with_quote(
+    settings: Settings, entry: WatchlistEntry, status: dict | None = None
+) -> dict:
     if entry.kind == KIND_INDEX:
         quote = IndexStore(settings.index_parquet_dir).latest_bars([entry.code]).get(entry.code)
         name = load_catalog(settings.meta_dir).get(entry.code) or entry.name
+        # 调用方已经拿到「刚启动回补」的状态时就用它，别再读一次状态
         return _to_item(
-            entry, quote, name, index_quotes.backfill_status(settings, entry.code)
+            entry, quote, name, status or index_quotes.backfill_status(settings, entry.code)
         )
     quote = ParquetStore(settings.parquet_dir).latest_bars([entry.code]).get(entry.code)
     return _to_item(entry, quote, entry.name)
