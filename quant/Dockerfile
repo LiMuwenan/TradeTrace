@@ -55,7 +55,9 @@ RUN groupadd --gid 10001 app \
     && chown -R app:app /app /data
 USER app
 
-VOLUME ["/data/raw", "/data/parquet", "/data/meta"]
+# 只声明数据根目录：子目录 raw/parquet/meta 由 QUANT_*_DIR 决定，
+# 单独给子目录声明卷会在挂父目录时多出匿名卷，容易把写入位置看错
+VOLUME ["/data"]
 EXPOSE 8000
 
 # 端口跟着 QUANT_PORT 走，避免改了端口健康检查还打 8000

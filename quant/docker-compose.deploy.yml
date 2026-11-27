@@ -10,14 +10,24 @@
 #   Git Bash：   TAG=sha-6f59ab2 docker compose -f docker-compose.deploy.yml up -d
 #   PowerShell： $env:TAG="sha-6f59ab2"; docker compose -f docker-compose.deploy.yml up -d
 #
+# ── 挂载：一条搞定 ────────────────────────────────────────────────
+# 宿主机 ${DATA_DIR_HOST} 整目录挂到容器 /data，三个子目录由下面
+# RAW_SUBDIR / PARQUET_SUBDIR / META_SUBDIR 决定，默认 raw / parquet / meta：
+#
+#   /data/raw      ← 原始 CSV（导入与每日增量取数都写）
+#   /data/parquet  ← 派生 Parquet（DuckDB 直读，重建也写）
+#   /data/meta     ← meta.db：规则、预警、通知配置、日报快照，丢了找不回
+#
+# 宿主机目录名不同就改子目录，别加挂载条数，例如 parquet 实际叫 market：
+#   PARQUET_SUBDIR=market
+# 整个数据目录不在 /data 下（例如 /home/ligen/lianghua/data）：
+#   DATA_DIR_HOST=/home/ligen/lianghua/data
+#
 # 宿主机路径用正斜杠；中文路径可以直接写。私有镜像先 docker login ghcr.io。
-# Linux 服务器示例（建议独立子目录，别和 lianghua 的 raw / meta.db 混放）：
-#   RAW_DIR_HOST=/home/ligen/lianghua/data/quant/raw
-#   PARQUET_DIR_HOST=/home/ligen/lianghua/data/quant/parquet
-#   META_DIR_HOST=/home/ligen/lianghua/data/quant/meta
-# 容器内是 uid 10001，宿主机目录先 `chown -R 10001:10001`，或按文件末尾注释用 APP_UID 对齐。
+# 容器内是 uid 10001，宿主机目录先 `chown -R 10001:10001`，
+# 或按文件末尾注释用 APP_UID / APP_GID 对齐当前用户。
 # 不要挂载本地 config.toml：里面的 G:\ 绝对路径在容器里不存在，
-# 容器内的目录一律由下面三个 * _DIR_HOST 决定。
+# 容器内的目录一律由下面三个 QUANT_*_DIR 决定。
 
 services:
   quant:
@@ -29,17 +39,14 @@ services:
     environment:
       QUANT_HOST: 0.0.0.0
       QUANT_PORT: "8000"
-      QUANT_RAW_DIR: /data/raw
-      QUANT_PARQUET_DIR: /data/parquet
-      QUANT_META_DIR: /data/meta
+      # 三个目录都是 /data 的子目录，只换名字，不换前缀
+      QUANT_RAW_DIR: "/data/${RAW_SUBDIR:-raw}"
+      QUANT_PARQUET_DIR: "/data/${PARQUET_SUBDIR:-parquet}"
+      QUANT_META_DIR: "/data/${META_SUBDIR:-meta}"
       TZ: Asia/Shanghai
     volumes:
-      # 原始 CSV：导入与每日增量取数都会写
-      - "${RAW_DIR_HOST:-/home/lianghua/data/raw}:/data/raw"
-      # 派生 Parquet：DuckDB 直读，重建也写这里
-      - "${PARQUET_DIR_HOST:-/home/lianghua/data/market}:/data/parquet"
-      # 用户记录库 meta.db：规则、预警、通知配置、日报快照，丢了找不回
-      - "${META_DIR_HOST:-/home/lianghua/data/meta}:/data/meta"
+      # 单挂载：宿主机整个数据目录 → 容器 /data
+      - "${DATA_DIR_HOST:-/data}:/data"
     restart: unless-stopped
     # Windows 的 bind mount 一般可直接写；若启动报「xxx 不可写」，
     # 先确认 Docker Desktop 已共享该盘符，仍不行再临时打开下面这行（不推荐常开）。

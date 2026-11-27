@@ -106,10 +106,10 @@ npm run build
 `Dockerfile` 多阶段构建（Node 构建前端 → Python 运行时），单容器同时提供 API 与前端静态页（`web/dist` 存在时由 FastAPI 托管，SPA 回退到 `index.html`，`/api` 未命中仍是 JSON 错误）。配套 `docker-compose.yml`、`.dockerignore`。
 
 - **目录与端口用环境变量覆盖**，优先级为 环境变量 > `config.toml` > 代码默认：`QUANT_HOST`、`QUANT_PORT`、`QUANT_RAW_DIR`、`QUANT_PARQUET_DIR`、`QUANT_META_DIR`。镜像内只放 `config.example.toml`，本地 `config.toml`（含 `G:\` 绝对路径）不进镜像。
-- **三个目录分别挂载**：`/data/raw`、`/data/parquet`、`/data/meta`；compose 用 `RAW_DIR_HOST` / `PARQUET_DIR_HOST` / `META_DIR_HOST` 指向宿主机。
+- **数据目录**：容器内统一在 `/data` 下，三个子目录 `raw`（原始 CSV）、`parquet`（派生）、`meta`（meta.db）由 `QUANT_RAW_DIR` / `QUANT_PARQUET_DIR` / `QUANT_META_DIR` 指定，默认 `/data/raw|parquet|meta`。部署 compose 只用一条挂载把宿主机数据目录挂到 `/data`，子目录名用 `RAW_SUBDIR` / `PARQUET_SUBDIR` / `META_SUBDIR` 调整。
 - 容器以 uid `10001` 非 root 运行，bind mount 的宿主机目录必须可写：`chown -R 10001:10001`，或用 compose 里的 `APP_UID` / `APP_GID` 对齐当前用户。
 - 启动：`docker compose up -d --build`；健康检查打 `/api/v1/health`，端口跟随 `QUANT_PORT`。
-- **只跑镜像不构建**：`docker-compose.deploy.yml`（无 build 段），`docker compose -f docker-compose.deploy.yml up -d`；镜像标签用 `TAG=sha-xxxxxxx` 覆盖，宿主机路径用 `RAW_DIR_HOST` / `PARQUET_DIR_HOST` / `META_DIR_HOST` 覆盖。
+- **只跑镜像不构建**：`docker-compose.deploy.yml`（无 build 段），`docker compose -f docker-compose.deploy.yml up -d`；镜像标签用 `TAG=sha-xxxxxxx` 覆盖，宿主机数据父目录用 `DATA_DIR_HOST` 覆盖（默认 `/data`）。
 - **CI 发布**：`.github/workflows/quant-image.yml`（仓库根级，GitHub 只认这一层）。push 到 `main`（含 PR 合并）先跑 pytest，通过后构建并推送到 `ghcr.io/<owner>/<repo>/quant`，标签为固定的 `latest` 与 `sha-<短 SHA>`（回溯/回滚用）；PR 只跑测试、不推送；也支持手动 `workflow_dispatch`。镜像用 `GITHUB_TOKEN` 推送，构建后会在 runner 上起容器打健康检查做冒烟。私有仓库拉镜像需 `docker login ghcr.io`（PAT 带 `read:packages`）。
 
 ## 约定
