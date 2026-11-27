@@ -58,6 +58,11 @@ export function removeFromWatchlist(code) {
   return request(`/watchlist/${encodeURIComponent(code)}`, { method: 'DELETE' })
 }
 
+/** 指数历史回补：后台任务，立刻返回运行态；加入自选时后端会自动触发一次。 */
+export function startIndexHistory(code) {
+  return request(`/stocks/${encodeURIComponent(code)}/history`, { method: 'POST' })
+}
+
 export function searchStocks(keyword) {
   return request(`/stocks/search?q=${encodeURIComponent(keyword)}`)
 }

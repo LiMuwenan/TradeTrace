@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot, AccordionTrigger } from 'reka-ui'
 import {
@@ -9,7 +9,7 @@ import {
 } from 'lucide-vue-next'
 import {
   addToWatchlist, fetchAlerts, fetchDataStatus, fetchHealth, fetchWatchlist,
-  removeFromWatchlist, searchStocks,
+  removeFromWatchlist, searchStocks, startIndexHistory,
 } from '../api/client'
 import { cn } from '../lib/utils'
 import Badge from './ui/Badge.vue'
@@ -40,6 +40,24 @@ const searchResults = ref([])
 const searching = ref(false)
 const searched = ref(false)
 const namesAvailable = ref(true)
+const addingCode = ref('')
+
+// 指数加入后数据在后台补，清单里先只有代码。轮询到没有 pending 就停，不常驻定时器
+let historyTimer = null
+function pollHistory() {
+  if (historyTimer) return
+  historyTimer = setInterval(async () => {
+    await loadWatchlist()
+    if (!watchlist.value.some((item) => item.historyPending)) {
+      clearInterval(historyTimer)
+      historyTimer = null
+    }
+  }, 2000)
+}
+
+onBeforeUnmount(() => {
+  if (historyTimer) clearInterval(historyTimer)
+})
 
 const healthRows = computed(() => [
   { label: '后端版本', value: health.value?.version },
@@ -136,11 +154,28 @@ async function runSearch() {
 }
 
 async function addStock(code) {
+  // 一次只加一个：指数加入后会触发后台回补，同一时刻只该有一路在跟数据源说话
+  if (addingCode.value) return
+  addingCode.value = code
   watchlistError.value = ''
   try {
-    await addToWatchlist(code)
+    const data = await addToWatchlist(code)
     searchResults.value = searchResults.value.filter((item) => item.code !== code)
     await loadWatchlist()
+    if (data.item?.historyPending) pollHistory()
+  } catch (err) {
+    watchlistError.value = err.message
+  } finally {
+    addingCode.value = ''
+  }
+}
+
+async function resyncIndex(code) {
+  watchlistError.value = ''
+  try {
+    await startIndexHistory(code)
+    await loadWatchlist()
+    pollHistory()
   } catch (err) {
     watchlistError.value = err.message
   }
@@ -377,7 +412,9 @@ onMounted(() => {
                     {{ item.name || '—' }}
                     <Badge v-if="item.kind === 'index'" variant="secondary" class="ml-1.5 align-middle">指数</Badge>
                   </span>
-                  <Button variant="outline" size="sm" @click="addStock(item.code)">加入</Button>
+                  <Button variant="outline" size="sm" :disabled="!!addingCode" @click="addStock(item.code)">
+                    {{ addingCode === item.code ? '加入中…' : '加入' }}
+                  </Button>
                 </li>
               </ul>
               <p v-else-if="searched && !searching" class="mt-3 text-sm text-muted-foreground">没有匹配的标的。</p>
@@ -397,7 +434,13 @@ onMounted(() => {
                     <span class="truncate">{{ item.name || '—' }}</span>
                     <Badge v-if="item.kind === 'index'" variant="secondary" class="shrink-0">指数</Badge>
                   </button>
-                  <span class="font-mono text-xs text-muted-foreground">{{ item.date || '—' }}</span>
+                  <span class="font-mono text-xs text-muted-foreground" :title="item.historyError || ''">
+                    <template v-if="item.historyPending">回补中…</template>
+                    <template v-else-if="!item.date && item.kind === 'index'">
+                      <button class="text-primary hover:underline" @click="resyncIndex(item.code)">补数据</button>
+                    </template>
+                    <template v-else>{{ item.date || '—' }}</template>
+                  </span>
                   <span class="text-right font-mono">{{ priceText(item.close) }}</span>
                   <span class="text-right font-mono font-medium" :class="quoteClass(item)">
                     {{ item.suspended ? '停牌' : quoteText(item) }}
