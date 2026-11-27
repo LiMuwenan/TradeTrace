@@ -364,7 +364,7 @@ onMounted(() => {
           <Card>
             <CardContent class="p-5">
               <form class="flex gap-2" @submit.prevent="runSearch">
-                <Input v-model="keyword" type="search" placeholder="输入代码或名称，如 600519 / 茅台" aria-label="搜索标的" />
+                <Input v-model="keyword" type="search" placeholder="输入代码或名称，如 600519 / 茅台 / 沪深300" aria-label="搜索标的" />
                 <Button type="submit" :disabled="searching || !keyword.trim()">{{ searching ? '搜索中…' : '搜索' }}</Button>
               </form>
 
@@ -373,7 +373,10 @@ onMounted(() => {
               <ul v-if="searchResults.length" class="mt-3 divide-y overflow-hidden rounded-lg border">
                 <li v-for="item in searchResults" :key="item.code" class="flex items-center gap-3 px-3 py-2.5">
                   <span class="w-24 font-mono text-xs text-muted-foreground">{{ item.code }}</span>
-                  <span class="flex-1 text-sm">{{ item.name || '—' }}</span>
+                  <span class="flex-1 text-sm">
+                    {{ item.name || '—' }}
+                    <Badge v-if="item.kind === 'index'" variant="secondary" class="ml-1.5 align-middle">指数</Badge>
+                  </span>
                   <Button variant="outline" size="sm" @click="addStock(item.code)">加入</Button>
                 </li>
               </ul>
@@ -390,7 +393,10 @@ onMounted(() => {
                   class="grid grid-cols-[110px_1fr_110px_100px_100px_64px] items-center gap-2 border-b px-3 py-2.5 text-sm last:border-b-0"
                 >
                   <button class="text-left font-mono text-xs text-primary hover:underline" @click="router.push(`/stocks/${item.code}`)">{{ item.code }}</button>
-                  <button class="truncate text-left hover:underline" @click="router.push(`/stocks/${item.code}`)">{{ item.name || '—' }}</button>
+                  <button class="flex items-center gap-1.5 truncate text-left hover:underline" @click="router.push(`/stocks/${item.code}`)">
+                    <span class="truncate">{{ item.name || '—' }}</span>
+                    <Badge v-if="item.kind === 'index'" variant="secondary" class="shrink-0">指数</Badge>
+                  </button>
                   <span class="font-mono text-xs text-muted-foreground">{{ item.date || '—' }}</span>
                   <span class="text-right font-mono">{{ priceText(item.close) }}</span>
                   <span class="text-right font-mono font-medium" :class="quoteClass(item)">

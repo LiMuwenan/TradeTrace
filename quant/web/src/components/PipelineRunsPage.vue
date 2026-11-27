@@ -18,7 +18,7 @@ const RUN_STATUS = {
   running: { label: '运行中', variant: 'warning' },
 }
 
-const STAGE_LABELS = { ingest: '取数', evaluate: '求值', report: '日报' }
+const STAGE_LABELS = { ingest: '取数', indexes: '指数', evaluate: '求值', report: '日报' }
 const TRIGGER_LABELS = { scheduled: '定时', manual: '手动', catchup: '补跑' }
 
 const items = ref([])

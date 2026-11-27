@@ -159,6 +159,7 @@ const changeClass = computed(() => {
 })
 
 /** 顶部主价跟随所选口径，另一个口径降为对照小字——两个数都摆出来，用户不会以为哪里算错了。 */
+const isIndex = computed(() => data.value?.kind === 'index')
 const adjustLabel = computed(() => (data.value?.adjust === 'raw' ? '不复权价' : '后复权价'))
 const otherLabel = computed(() => (data.value?.adjust === 'raw' ? '后复权' : '不复权'))
 const otherPrice = computed(() => {
@@ -197,6 +198,7 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-2">
             <h1 class="text-xl font-semibold tracking-tight">{{ data.name || data.code }}</h1>
             <span class="font-mono text-xs text-muted-foreground">{{ data.code }}</span>
+            <Badge v-if="isIndex" variant="secondary">指数</Badge>
             <Badge v-if="data.inWatchlist" variant="secondary">自选</Badge>
           </div>
           <div class="mt-2 flex items-baseline gap-3">
@@ -205,12 +207,13 @@ onBeforeUnmount(() => {
             <span class="text-xs text-muted-foreground">最近交易日 {{ data.latest.date }}</span>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">
-            {{ adjustLabel }}<span v-if="otherPrice !== null"> · {{ otherLabel }} {{ price(otherPrice) }}</span>
+            {{ isIndex ? '指数点位' : adjustLabel
+            }}<span v-if="!isIndex && otherPrice !== null"> · {{ otherLabel }} {{ price(otherPrice) }}</span>
           </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <div class="flex items-center gap-1 rounded-lg border p-0.5">
+          <div v-if="!isIndex" class="flex items-center gap-1 rounded-lg border p-0.5">
             <button
               v-for="item in ADJUSTS"
               :key="item.key"
