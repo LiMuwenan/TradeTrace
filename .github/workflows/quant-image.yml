@@ -56,7 +56,17 @@ jobs:
 
       - name: 运行测试
         working-directory: quant/backend
-        run: python -m pytest -q
+        run: |
+          # tee 一份日志：失败时把用例名写进注解——日志面板要展开才看得到，
+          # 注解在「检查」列表里直接可见，省掉「CI 红了但不知道挂在哪」的来回
+          python -m pytest -q --tb=short 2>&1 | tee /tmp/pytest.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            failures=$(grep -E "^(FAILED|ERROR)" /tmp/pytest.log | head -5 | tr '\n' ' ')
+            echo "::error::pytest 退出码 $status ${failures:-（没有 FAILED/ERROR 行，见下方尾部日志）}"
+            tail -n 40 /tmp/pytest.log
+            exit "$status"
+          fi
 
   image:
     name: 构建并推送镜像
