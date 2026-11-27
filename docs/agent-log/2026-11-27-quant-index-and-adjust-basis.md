@@ -50,4 +50,11 @@ related_issues: []
 
 > 依据：用户「将表格中的指数像股票数据一样管理，分不同文件夹存储。指数也能自选添加…只能获取单个指数的指定日期内的数据」；用户「Q1、用户在操作时用同一个入口，同一个界面，应该怎样存储方便查询 / Q2、A / Q3、A / Q4、A / Q5、A / Q6、A，隐藏或者禁用」；Agent「一只一文件…回补某一只时只重写它自己」。
 
+## 2026-11-27 11:29
+
+- **[偏好]** 归档文件命名改为 `YYYY-MM-DD-<主题 slug>.md`（用户要求把 UUID 文件名改名），与本目录既有的 `2026-10-24-tradetrace-planning-ocr.md` 保持一致；frontmatter 的 `topic` 同步为「quant 指数支持与复权口径切换」。
+- **[决策·已定]** `docs/agent-log/.current-session.json` 是每台机器不同的本地绑定，**不入库**（已从索引移除并写入根 `.gitignore`）；`INDEX.md` 仍由 `archive.py index` 生成入库。
+
+> 依据：用户「D:\Project\TradeTrace\docs\agent-log\2026-11-27-49d12792-....md 改名」；技能内约定「会话绑定关系保存在 docs/agent-log/.current-session.json，不要手工编辑或提交」。
+
 <!-- 归档总结（snapshot）追加在本文件最末尾，位于所有时间戳记录之后；重新 snapshot 时整节替换，不触碰上方记录。 -->
