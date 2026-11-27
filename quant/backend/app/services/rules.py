@@ -13,8 +13,9 @@ import logging
 from app.config import Settings
 from app.services import rule_eval
 from app.storage import rule_store
+from app.storage.index_catalog import is_index_code
 from app.storage.meta_db import Rule, RuleValidationError, connect, now_iso
-from app.storage.watchlist_store import load_watchlist
+from app.storage.watchlist_store import KIND_STOCK, load_watchlist
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def list_rules(settings: Settings) -> dict:
     finally:
         conn.close()
 
-    watchlist = {entry.code for entry in load_watchlist(settings.meta_dir)}
+    watchlist = {entry.code for entry in load_watchlist(settings.meta_dir) if entry.kind == KIND_STOCK}
     items = [_to_item(rule, watchlist, last_dates.get(rule.id)) for rule in rules]
     return {
         "items": items,
@@ -66,6 +67,9 @@ def create_rule(
     用户可在列表里重试启用——这比「建好了但状态错的规则在跑」安全得多。此时接口仍返回
     201 并带上规则 id：抛错会让用户以为没建成，再点一次就多出一条重复规则。
     """
+    if scope == "single" and scope_code and is_index_code(settings.meta_dir, scope_code):
+        raise RuleValidationError("指数暂不支持规则预警，请选择股票")
+
     conn = connect(settings.meta_dir, settings.timezone)
     try:
         rule = rule_store.create_rule(
@@ -196,7 +200,10 @@ def _enable(settings: Settings, rule_id: int) -> Rule:
 
 
 def _watchlist(settings: Settings) -> set[str]:
-    return {entry.code for entry in load_watchlist(settings.meta_dir)}
+    """规则的作用范围只含股票：指数暂不支持规则与预警。"""
+    return {
+        entry.code for entry in load_watchlist(settings.meta_dir) if entry.kind == KIND_STOCK
+    }
 
 
 def _to_item(rule: Rule, watchlist: set[str], last_triggered: str | None) -> dict:

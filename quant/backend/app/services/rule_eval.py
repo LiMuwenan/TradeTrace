@@ -21,7 +21,7 @@ from app.storage.meta_db import MA_RULE_TYPES, Rule, connect
 from app.storage.parquet_store import ParquetStore
 from app.storage.schema import normalize_code
 from app.storage.stock_names import StockNameCache
-from app.storage.watchlist_store import load_watchlist
+from app.storage.watchlist_store import KIND_STOCK, load_watchlist
 
 logger = logging.getLogger(__name__)
 
@@ -162,11 +162,17 @@ def transitions(
 
 
 def scope_codes(settings: Settings, rule: Rule, cache: dict[str, list[str]]) -> list[str]:
-    """规则实际覆盖的标的。日报与求值共用同一套范围判定。"""
+    """规则实际覆盖的标的。日报与求值共用同一套范围判定。
+
+    只取自选里的**股票**：指数没有停牌标记与复权因子，走的是另一套存储，
+    强行纳入会让 05 的判定链在两种数据上分叉（指数暂不支持规则预警）。
+    """
     if rule.scope == "single":
         return [rule.scope_code] if rule.scope_code else []
     if "watchlist" not in cache:
-        cache["watchlist"] = [entry.code for entry in load_watchlist(settings.meta_dir)]
+        cache["watchlist"] = [
+            entry.code for entry in load_watchlist(settings.meta_dir) if entry.kind == KIND_STOCK
+        ]
     return cache["watchlist"]
 
 

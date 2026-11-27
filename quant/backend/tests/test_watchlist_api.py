@@ -204,7 +204,7 @@ def test_search_falls_back_to_stored_codes_without_names(local_settings, tmp_pat
     data = client.get("/api/v1/stocks/search", params={"q": "600000"}).json()["data"]
 
     assert data["namesAvailable"] is False
-    assert data["items"] == [{"code": "sh.600000", "name": ""}]
+    assert data["items"] == [{"code": "sh.600000", "name": "", "kind": "stock"}]
 
 
 def test_search_survives_unexpected_refresh_error(local_settings, tmp_path):
@@ -214,7 +214,7 @@ def test_search_survives_unexpected_refresh_error(local_settings, tmp_path):
     data = client.get("/api/v1/stocks/search", params={"q": "600000"}).json()["data"]
 
     assert data["namesAvailable"] is False
-    assert data["items"] == [{"code": "sh.600000", "name": ""}]
+    assert data["items"] == [{"code": "sh.600000", "name": "", "kind": "stock"}]
 
 
 def test_add_survives_unexpected_refresh_error(local_settings, tmp_path):

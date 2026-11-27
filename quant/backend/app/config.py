@@ -51,6 +51,11 @@ class Settings:
     schedule_enabled: bool = False
     schedule_time: str = "15:30"
 
+    @property
+    def index_parquet_dir(self) -> Path:
+        """指数日线的独立目录：与股票分开，列不同、分区方式也不同（见 IndexStore）。"""
+        return self.parquet_dir / "index"
+
 
 def resolve_config_path(explicit: Path | str | None = None) -> Path:
     """确定要读取的配置文件路径。"""

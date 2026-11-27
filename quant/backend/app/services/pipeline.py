@@ -18,7 +18,7 @@ from time import perf_counter
 from typing import Callable
 
 from app.config import Settings
-from app.services import report as report_service
+from app.services import index_quotes, report as report_service
 from app.services import rule_eval
 from app.storage.ingest import Ingestor
 from app.storage.meta_db import connect
@@ -39,6 +39,7 @@ from app.storage.sources import BaostockFetcher, MarketDataSource, RealtimeSourc
 logger = logging.getLogger(__name__)
 
 STAGE_INGEST = "ingest"
+STAGE_INDEXES = "indexes"
 STAGE_EVALUATE = "evaluate"
 STAGE_REPORT = "report"
 
@@ -59,6 +60,7 @@ def run(
     trade_date: str,
     *,
     source_factory: Callable[[], MarketDataSource] | None = None,
+    index_fetcher=None,
     notifier=None,
     trigger: str = "manual",
 ) -> dict:
@@ -92,6 +94,28 @@ def run(
         stages.append(
             StageResult(
                 STAGE_INGEST, "ok", _elapsed(started), f"写入 {report.rows} 行（覆盖 {report.replaced_rows}）"
+            )
+        )
+
+    # --- 指数增量（只跑自选里的指数，失败不阻断后续阶段）--------------------
+    started = perf_counter()
+    try:
+        index_report = index_quotes.sync_watchlist(settings, trade_date, index_fetcher)
+    except Exception as exc:  # noqa: BLE001 指数是附加信息，不能拖垮收盘链
+        logger.warning("%s 指数增量失败：%s", trade_date, exc)
+        stages.append(StageResult(STAGE_INDEXES, "failed", _elapsed(started), error=str(exc)))
+    else:
+        errors = index_report.get("errors") or []
+        detail = f"{len(index_report['touched'])} 只指数写入 {index_report['rows']} 行"
+        if errors:
+            detail += f"，{len(errors)} 只失败：{errors[0]}"
+        stages.append(
+            StageResult(
+                STAGE_INDEXES,
+                "failed" if errors else "ok",
+                _elapsed(started),
+                detail=detail,
+                error=errors[0] if errors else None,
             )
         )
 

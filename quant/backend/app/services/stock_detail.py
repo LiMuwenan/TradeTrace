@@ -19,8 +19,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from app.config import Settings
+from app.storage.index_catalog import load_catalog
+from app.storage.index_store import IndexStore
 from app.storage.parquet_store import ParquetStore
-from app.storage.schema import normalize_code
+from app.storage.schema import IngestError, normalize_code, normalize_index_code
 from app.storage.stock_names import StockNameCache
 from app.storage.watchlist_store import load_watchlist
 
@@ -40,6 +42,25 @@ ADJUST_NOTES = {
     "back": "价格为后复权（原始价 × 后复权因子），避免除权造成的虚假断层",
     "raw": "价格为不复权（交易所原始成交价），除权日会出现价格断层；规则求值仍用后复权价",
 }
+
+INDEX_NOTE = "指数没有除权，价格即指数点位，因此不设复权口径"
+
+
+def detail(
+    settings: Settings,
+    stock_names: StockNameCache,
+    raw_code: str,
+    range_key: str = DEFAULT_RANGE,
+    adjust: str = DEFAULT_ADJUST,
+) -> dict:
+    """按代码分派：命中指数清单走指数口径，其余按股票。
+
+    只认「带前缀且已在指数清单里」的代码，不按代码段猜——`sh.000001` 是指数，
+    `sz.000001` 是平安银行，两者只差市场前缀。
+    """
+    if _is_index(settings, raw_code):
+        return index_detail(settings, raw_code, range_key)
+    return stock_detail(settings, stock_names, raw_code, range_key, adjust)
 
 
 def stock_detail(
@@ -74,6 +95,7 @@ def stock_detail(
     return {
         "code": code,
         "name": stock_names.names().get(code, ""),
+        "kind": "stock",
         "inWatchlist": code in {entry.code for entry in load_watchlist(settings.meta_dir)},
         "range": range_key,
         "rangeDays": RANGE_DAYS[range_key],
@@ -92,6 +114,55 @@ def stock_detail(
         "maWindows": list(MA_WINDOWS),
         "adjustNote": ADJUST_NOTES[adjust],
     }
+
+
+def index_detail(
+    settings: Settings, raw_code: str, range_key: str = DEFAULT_RANGE
+) -> dict:
+    """指数详情：只有一条价格序列（点位），没有复权口径，也没有停牌行。"""
+    if range_key not in RANGE_DAYS:
+        raise ValueError(f"未知的时间范围：{range_key}，可选 {'/'.join(RANGE_DAYS)}")
+    code = normalize_index_code(raw_code)
+
+    bars = IndexStore(settings.index_parquet_dir).series(code)
+    points = [bar for bar in bars if bar.get("close") is not None]
+    if not points:
+        raise LookupError(f"{code} 暂无行情数据（可在自选里移除后重新添加以下载历史）")
+
+    moving = {str(window): _moving_average(points, window, "close") for window in MA_WINDOWS}
+    start = _range_start(points, range_key)
+    latest = points[-1]
+
+    return {
+        "code": code,
+        "name": load_catalog(settings.meta_dir).get(code, ""),
+        "kind": "index",
+        "inWatchlist": code in {entry.code for entry in load_watchlist(settings.meta_dir)},
+        "range": range_key,
+        "rangeDays": RANGE_DAYS[range_key],
+        # 口径字段照常返回，但只有一个值：前端据此隐藏切换按钮
+        "adjust": "raw",
+        "latest": {
+            "date": latest["date"],
+            "close": latest["close"],
+            "rawClose": latest["close"],
+            "adjClose": latest["close"],
+            "pctChg": latest.get("pctChg"),
+            "volume": latest.get("volume"),
+        },
+        "items": [_to_bar(bar, "raw") for bar in points[start:]],
+        "ma": {key: values[start:] for key, values in moving.items()},
+        "maWindows": list(MA_WINDOWS),
+        "adjustNote": INDEX_NOTE,
+    }
+
+
+def _is_index(settings: Settings, raw_code: str) -> bool:
+    try:
+        code = normalize_index_code(raw_code)
+    except IngestError:
+        return False
+    return code in load_catalog(settings.meta_dir)
 
 
 def _moving_average(bars: list[dict], window: int, close_field: str) -> list[float | None]:

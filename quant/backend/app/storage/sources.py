@@ -356,3 +356,45 @@ class BaostockFetcher:
             return pd.DataFrame(collect_rows(result), columns=result.fields)
         finally:
             module.logout()
+
+
+class IndexFetcher(Protocol):
+    """指数取数的最小接口；测试用假实现替换，不访问网络。"""
+
+    def fetch_index_daily(self, code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """单只指数在 [start_date, end_date] 的日线，10 列；无数据时返回空表。"""
+
+
+class BaostockIndexFetcher:
+    """指数日线：`query_history_k_data_plus` 逐只按区间取。
+
+    全市场接口 `query_daily_history_k_AStock` 只含 A 股，指数不在其中，所以指数只能
+    这样取——这也正好符合「不拉整个市场、只取单只指定区间」的取数纪律。
+    """
+
+    # 指数没有复权、换手与估值字段，多要列会拿到空串
+    FIELDS = "date,code,open,high,low,close,preclose,volume,amount,pctChg"
+
+    def fetch_index_daily(self, code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        try:
+            import baostock as bs
+        except ImportError as exc:  # pragma: no cover - 依赖缺失时的可操作提示
+            raise IngestError("未安装 baostock，无法获取指数日线；请先 pip install baostock") from exc
+
+        login = bs.login()
+        if login.error_code != "0":
+            raise IngestError(f"baostock 登录失败：{login.error_msg}")
+        try:
+            result = bs.query_history_k_data_plus(
+                code,
+                self.FIELDS,
+                start_date=start_date,
+                end_date=end_date,
+                frequency="d",
+                adjustflag="3",
+            )
+            if result.error_code != "0":
+                raise IngestError(f"baostock 指数日线失败：{result.error_msg}")
+            return pd.DataFrame(collect_rows(result), columns=result.fields)
+        finally:
+            bs.logout()

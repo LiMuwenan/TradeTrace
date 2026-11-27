@@ -17,6 +17,7 @@ from app.config import PROJECT_ROOT, Settings, load_settings
 from app.schemas import fail
 from app.services.notify import AlertNotifier, Notifier
 from app.services.scheduler import DailyScheduler
+from app.storage.sources import BaostockIndexFetcher
 from app.storage.stock_names import BaostockNameProvider, StockNameCache
 from app.storage.watchlist_store import WatchlistCorruptError
 
@@ -30,6 +31,7 @@ def create_app(
     settings: Settings | None = None,
     stock_names: StockNameCache | None = None,
     notifier: Notifier | None = None,
+    index_fetcher=None,
 ) -> FastAPI:
     settings = settings or load_settings()
     _ensure_dirs_writable(settings)
@@ -62,6 +64,8 @@ def create_app(
     )
     # 未配置通道时求值仍会落库，只是不投递（ADR 0008）；配置在库里，改完即时生效
     app.state.notifier = notifier or AlertNotifier(settings)
+    # 指数取数：生产默认走 baostock，测试注入假实现，避免用例联网
+    app.state.index_fetcher = index_fetcher or BaostockIndexFetcher()
 
     app.add_middleware(
         CORSMiddleware,

@@ -61,13 +61,54 @@ STORE_SCHEMA = pa.schema(
     ]
 )
 
+# 指数日线只存 10 列：核心价格/量额/涨跌幅。请求 18 列虽然也能返回，但估值列全是 0、
+# `tradestatus` 恒为 1、`isST` 恒为 0、`turn` 对指数没有确定分母——存进来只是占位噪声。
+INDEX_COLUMNS = [
+    "date",
+    "code",
+    "open",
+    "high",
+    "low",
+    "close",
+    "preclose",
+    "volume",
+    "amount",
+    "pctChg",
+]
+
+INDEX_SCHEMA = pa.schema(
+    [
+        ("date", pa.string()),
+        ("code", pa.string()),
+        ("open", pa.float64()),
+        ("high", pa.float64()),
+        ("low", pa.float64()),
+        ("close", pa.float64()),
+        ("preclose", pa.float64()),
+        ("volume", pa.float64()),
+        ("amount", pa.float64()),
+        ("pctChg", pa.float64()),
+    ]
+)
+
 _CODE_RE = re.compile(r"(?i)^(?:(sh|sz|bj)[.\-]?)?(\d{6})(?:[.\-](sh|sz|bj))?$")
+
+# 指数代码必须自带前缀：裸 6 位数字会按首位推断成股票（000001 是平安银行，不是上证指数）
+_INDEX_CODE_RE = re.compile(r"(?i)^(?:(sh|sz|bj)[.\-]?(\d{6})|(\d{6})[.\-](sh|sz|bj))$")
 
 _MIN_GAP_ITEMS = 5
 
 
 class IngestError(RuntimeError):
     """数据不合格，拒绝写入。消息面向用户，可直接展示。"""
+
+
+class CodeFormatError(IngestError):
+    """标的代码写法不合法（区别于「代码合法但查不到数据」）。
+
+    接口层据此把「格式错」统一成一句提示，而把「这个代码需要带前缀」这类
+    更有用的信息原样透出。
+    """
 
 
 class NoMarketDataError(IngestError):
@@ -86,7 +127,7 @@ def normalize_code(raw: object) -> str:
     text = str(raw).strip()
     match = _CODE_RE.match(text)
     if not match:
-        raise IngestError(f"无法识别的标的代码：{raw!r}（应形如 sh.600000）")
+        raise CodeFormatError(f"无法识别的标的代码：{raw!r}（应形如 sh.600000）")
 
     prefix = (match.group(1) or match.group(3) or "").lower()
     digits = match.group(2)
@@ -98,5 +139,21 @@ def normalize_code(raw: object) -> str:
         elif digits.startswith(("4", "8", "9")):
             prefix = "bj"
         else:
-            raise IngestError(f"无法从代码推断交易所：{raw!r}")
+            raise CodeFormatError(f"无法从代码推断交易所：{raw!r}")
+    return f"{prefix}.{digits}"
+
+
+def normalize_index_code(raw: object) -> str:
+    """指数代码归一，**必须自带市场前缀**。
+
+    指数与股票共用 6 位数字空间（`000001` 既是上证指数也是平安银行），裸代码只能靠推断，
+    而推断规则是按首位分交易所，必然把 `000001` 判成 `sz.000001`。所以这里拒绝裸代码，
+    宁可让调用方补上前缀，也不接受一个「看起来合法」的错误代码。
+    """
+    text = str(raw).strip()
+    match = _INDEX_CODE_RE.match(text)
+    if not match:
+        raise CodeFormatError(f"指数代码必须带市场前缀，如 sh.000001：{raw!r}")
+    prefix = (match.group(1) or match.group(4) or "").lower()
+    digits = match.group(2) or match.group(3)
     return f"{prefix}.{digits}"

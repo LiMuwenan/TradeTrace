@@ -13,6 +13,11 @@ from pathlib import Path
 
 WATCHLIST_FILENAME = "watchlist.json"
 
+# 自选标的类型：股票与指数共用一份清单，靠这个字段区分行情来源
+KIND_STOCK = "stock"
+KIND_INDEX = "index"
+KINDS = (KIND_STOCK, KIND_INDEX)
+
 
 class WatchlistCorruptError(Exception):
     """自选文件存在但无法读取或解析。
@@ -26,9 +31,10 @@ class WatchlistEntry:
     code: str
     name: str
     added_at: str
+    kind: str = KIND_STOCK
 
     def as_dict(self) -> dict:
-        return {"code": self.code, "name": self.name, "addedAt": self.added_at}
+        return {"code": self.code, "name": self.name, "addedAt": self.added_at, "kind": self.kind}
 
 
 def load_watchlist(meta_dir: Path | str) -> list[WatchlistEntry]:
@@ -55,11 +61,14 @@ def load_watchlist(meta_dir: Path | str) -> list[WatchlistEntry]:
         if not code or code in seen:
             continue
         seen.add(code)
+        kind = str(item.get("kind") or KIND_STOCK).strip().lower()
         entries.append(
             WatchlistEntry(
                 code=code,
                 name=str(item.get("name") or ""),
                 added_at=str(item.get("addedAt") or ""),
+                # 旧文件没有 kind 字段：一律按股票处理，向后兼容
+                kind=kind if kind in KINDS else KIND_STOCK,
             )
         )
     return entries

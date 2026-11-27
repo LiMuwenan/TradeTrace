@@ -74,7 +74,12 @@ def test_full_run_records_every_stage(local_settings, tmp_path):
     record = pipeline.run(local_settings, rows[-1]["date"], source_factory=csv_source(tmp_path))
 
     assert record["status"] == "ok"
-    assert [stage["stage"] for stage in record["stages"]] == ["ingest", "evaluate", "report"]
+    assert [stage["stage"] for stage in record["stages"]] == [
+        "ingest",
+        "indexes",
+        "evaluate",
+        "report",
+    ]
     assert all(stage["status"] == "ok" for stage in record["stages"])
     assert cursor_of(local_settings) == rows[-1]["date"]
 
@@ -99,7 +104,7 @@ def test_business_day_flow_produces_alert_and_report(local_settings, tmp_path):
     record = pipeline.run(local_settings, rows[-1]["date"], source_factory=csv_source(tmp_path))
 
     assert record["status"] == "ok"
-    evaluate = record["stages"][1]
+    evaluate = next(stage for stage in record["stages"] if stage["stage"] == "evaluate")
     assert "触发 1" in evaluate["detail"]
     conn = meta_db.connect(local_settings.meta_dir, local_settings.timezone)
     try:
@@ -149,8 +154,9 @@ def test_evaluate_failure_keeps_ingested_data(local_settings, tmp_path, monkeypa
     record = pipeline.run(local_settings, rows[-1]["date"], source_factory=csv_source(tmp_path))
 
     assert record["status"] == "failed"
-    assert record["stages"][0]["status"] == "ok"  # 取数成果保留
-    assert record["stages"][1]["status"] == "failed"
+    by_name = {stage["stage"]: stage for stage in record["stages"]}
+    assert by_name["ingest"]["status"] == "ok"  # 取数成果保留
+    assert by_name["evaluate"]["status"] == "failed"
     # 数据确实进了库：失败不回滚已完成的阶段
     assert pipeline.ParquetStore(local_settings.parquet_dir).has_date(rows[-1]["date"])
 
@@ -272,7 +278,12 @@ def test_run_endpoint_reports_stages(local_settings, tmp_path):
 
     assert data["total"] == 1
     assert data["items"][0]["status"] == "ok"
-    assert len(data["items"][0]["stages"]) == 3
+    assert [stage["stage"] for stage in data["items"][0]["stages"]] == [
+        "ingest",
+        "indexes",
+        "evaluate",
+        "report",
+    ]
 
 
 def test_runs_endpoint_returns_cursor(local_settings, tmp_path):

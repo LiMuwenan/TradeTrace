@@ -33,7 +33,7 @@ def stock_detail(
     adjust: str = detail_service.DEFAULT_ADJUST,
 ) -> dict:
     try:
-        data = detail_service.stock_detail(
+        data = detail_service.detail(
             request.app.state.settings, request.app.state.stock_names, code, range, adjust
         )
     except IngestError as exc:
