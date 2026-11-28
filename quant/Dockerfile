@@ -51,7 +51,7 @@ COPY config/config.example.toml /app/config/config.toml
 # 非 root 运行；数据目录预先建好并授权，命名卷首次挂载时会继承这份属主
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app \
-    && mkdir -p /data/raw /data/parquet /data/meta \
+    && mkdir -p /data/raw /data/market /data/meta \
     && chown -R app:app /app /data
 USER app
 
