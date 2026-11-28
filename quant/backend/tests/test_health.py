@@ -26,7 +26,7 @@ def test_health_reports_version_and_dirs(settings):
     assert data["status"] == "ok"
     assert data["version"] == __version__
     assert data["timezone"] == "Asia/Shanghai"
-    assert data["parquetDir"].endswith("parquet")
+    assert data["parquetDir"].endswith("market")
     assert data["rawDir"].endswith("raw")
     assert data["metaDir"].endswith("meta")
     assert data["serverTime"]
